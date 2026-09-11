@@ -1,0 +1,26 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+**/doc/api/
+
+# macOS
+.DS_Store
+
+# Secrets — never commit device credentials or signing material
+*.keystore
+*.jks
+keystore.properties
+secrets.properties

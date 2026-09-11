@@ -1,0 +1,29 @@
+name: lumora_ble
+description: >-
+  One SDK for connecting to Oura Ring, FreeStyle Libre and Dexcom sensors over
+  BLE, so apps do not integrate each device separately.
+version: 0.1.0
+repository: https://github.com/lumoradevlab/BLE-Android
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.lumora.ble.flutter
+        pluginClass: LumoraBlePlugin
+      # iOS is not implemented yet — see README. Declaring it here before the
+      # Swift side exists would make `flutter run` fail on iOS with a confusing
+      # missing-symbol error rather than a clear "unsupported platform".

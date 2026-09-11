@@ -1,0 +1,145 @@
+# Protocol status
+
+Honest per-device assessment. Read this before promising a device to a customer.
+
+**The headline: generation matters more than brand.** For both CGMs the older
+generation is supportable and the current one is not. Check which hardware your
+users actually have before planning.
+
+| Device | Transport | Status | Notes |
+|---|---|---|---|
+| Dexcom **G6** | BLE | **Works** | Needs the transmitter serial; Android bonds on first connect |
+| Dexcom **G7 / ONE+** | BLE | **Not supported** | EC-J-PAKE; rejected with a clear error |
+| Libre **1 / 2** | NFC | **Works** | Tap to read; sensor activated by the official app |
+| Libre **3** | BLE | **Not supported** | Requires an Abbott-issued certificate |
+| Oura Ring 3/4/5 | BLE | **Works, with setup** | Ring must be factory-reset |
+
+No vendor publishes a specification for any of this. Every constant comes from
+reverse-engineering work, using these protocols violates each vendor's terms of
+service, and a firmware update can break them without notice. **For an SDK
+shipped to third parties this is a licensing and liability decision, not just a
+technical one** — see "Shipping this" at the bottom.
+
+---
+
+## Dexcom G6 — works
+
+Implemented in `devices/dexcom`.
+
+The key is derived entirely from the transmitter serial printed on the
+applicator — there is no key exchange, no certificate, nothing to provision:
+
+```
+key = UTF-8("00" + SERIAL + "00" + SERIAL)   // exactly 16 bytes, AES-128
+```
+
+Handshake:
+
+1. Phone → `01 <random 8-byte token> <slot>`
+2. Transmitter → `03 <our token, encrypted> <its 8-byte challenge>`
+3. Phone verifies the echo, then → `04 <challenge, encrypted>`
+4. Transmitter → `05 <authenticated> <bonded>`, then Android bonding
+
+Encryption is AES-128-ECB over the 8-byte value **doubled** to fill one block,
+keeping the first 8 bytes of ciphertext.
+
+**Step 3 is mutual authentication and must not be skipped.** Verifying that the
+transmitter encrypted our token the same way we did is what stops a nearby
+impostor from feeding an app fabricated glucose values. `DexcomConnection`
+treats a mismatch as a hard failure.
+
+Sensor state gates everything: only `CalibrationState.OK` yields a reading.
+Warm-up, calibration-needed, and sensor-failed states return nothing rather than
+a misleading number.
+
+Not implemented: **backfill**. The G6 stores recent readings and replays them on
+request, but the backfill characteristic has its own chunked framing that needs a
+real transmitter to validate. Live readings work; history does not.
+
+## Dexcom G7 — not supported
+
+The G7 replaced the scheme above with **EC-J-PAKE**. Two independent blockers:
+
+1. **No EC-J-PAKE on Android.** The JCE has no J-PAKE at all; BouncyCastle ships
+   only the finite-field variant, not the elliptic-curve one the G7 uses. The
+   primitive would have to be written from scratch against mbedtls' wire format.
+2. **Channel contention.** The G7 exposes three BLE channels and third-party
+   collectors can only use the pairing channel — the same one the official app
+   and Omnipod 5 use. Reports consistently show the sensor dropping the link
+   right after the J-PAKE exchange when another client holds it.
+
+`DexcomAuth.requireG6()` rejects a G7 by its advertised name (`DXCM…`) with an
+explanatory error rather than letting it hang in a retry loop.
+
+## FreeStyle Libre 1/2 — works, over NFC
+
+Implemented in `devices/libre`.
+
+These are **NFC devices, not BLE**. The phone is held against the sensor and the
+whole 344-byte FRAM image transfers in one pass — no pairing, no encryption, no
+connection to maintain. That is exactly why they remain practical.
+
+The image holds two wrapping ring buffers:
+
+- **trend**: 16 slots, one per minute
+- **history**: 32 slots, one per 15 minutes
+
+Each slot is 6 bytes; glucose is the low 13 bits. The newest entry sits one slot
+*before* the write pointer and older entries walk backwards with modulo
+arithmetic — getting this wrong yields plausible-looking but time-shifted data,
+which is why `LibreFramTest` covers the wrap explicitly.
+
+Libre Pro/H keeps its counters at different offsets; that is the one layout
+branch in the parser.
+
+**Caveat on accuracy.** The implemented path is *uncalibrated*: raw counts are
+converted with a fixed multiplier. Real sensors carry per-unit calibration
+parameters that the official algorithm applies on top, so values can drift from
+what the vendor app shows. Do not present these as clinically equivalent.
+
+## FreeStyle Libre 3 — not supported
+
+Libre 3 moved to BLE-only with a certificate-gated handshake: `startECDH` →
+`loadCertificate` → **162-byte app certificate** → ECDH over P-256 ephemeral
+keys → symmetric challenge → session keys.
+
+The app certificate is **issued and signed by Abbott** and embedded in their app.
+It cannot be synthesized. This is a licensing problem wearing an engineering
+costume, and no amount of effort changes it. The supported route is LibreLinkUp
+or an Abbott partner agreement.
+
+## Oura Ring — works, with a setup cost
+
+Implemented in `devices/oura`.
+
+Connect → subscribe → `2f 01 2b` for a 15-byte nonce → AES-128-ECB encrypt under
+the 16-byte shared key → `2f 11 2d <16 bytes>` → `2f 02 2e 00` on success.
+
+**The catch.** The key is installed with `24 10 <key>`, which only succeeds on a
+**factory-reset ring**; a ring already paired with the Oura app answers `0x05`.
+So the user must reset the ring and give up the official app for it. Viable for
+research cohorts and dedicated hardware, a hard sell for consumers.
+
+Raw samples only — Oura's sleep and readiness scores come from proprietary
+models that do not run on the ring.
+
+---
+
+## Shipping this
+
+This SDK is intended for third-party developers, which raises the stakes above
+using the same code in your own app:
+
+- **Terms of service.** Every protocol here is unofficial. Your users will be
+  building products on protocols their vendors do not sanction. Say so plainly
+  in your own terms rather than letting integrators discover it.
+- **Medical framing.** CGM data drives treatment decisions. The Libre path is
+  uncalibrated and the G6 path has no backfill; neither is a substitute for the
+  vendor's own app or alerting. The SDK must not be presented as a medical
+  device, and integrators should be told the same.
+- **Breakage.** A firmware update can end any of these overnight. Version the
+  SDK so a broken device can be disabled without forcing integrators to ship a
+  new app.
+
+`SupportMatrix` reports all of this at runtime so an integrating app can grey out
+a device rather than failing at connect time.
