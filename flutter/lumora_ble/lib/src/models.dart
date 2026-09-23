@@ -5,7 +5,27 @@
 /// cannot silently shift the meaning of an existing one.
 library;
 
-enum DeviceKind { ouraRing, libreSensor, dexcomSensor }
+enum DeviceKind {
+  ouraRing,
+  libreSensor,
+  dexcomSensor,
+
+  /// Any peripheral speaking the SIG standard GATT profiles (Heart Rate
+  /// 0x180D, Battery 0x180F, Health Thermometer 0x1809, Pulse Oximeter
+  /// 0x1822).
+  ///
+  /// Not a vendor: one kind covers Fitbit Charge 6, Fitbit Air, Pixel Watch
+  /// 2+, Polar, Wahoo, Garmin straps and generic oximeters.
+  heartRateMonitor,
+
+  /// A Fitbit tracker's own sync protocol. Blocked — check [SupportStatus]
+  /// before offering it. Live heart rate is reachable via [heartRateMonitor].
+  fitbitTracker,
+
+  /// A Pixel Watch as a full companion device. Blocked — it is a Wear OS
+  /// device with no GATT surface. Live heart rate via [heartRateMonitor].
+  pixelWatch,
+}
 
 enum SupportStatus { supported, requiresSetup, blocked }
 

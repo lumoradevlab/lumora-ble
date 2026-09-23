@@ -5,7 +5,35 @@ import java.time.Instant
 /** Identifies a physical device across scan/connect/reconnect cycles. */
 data class DeviceId(val address: String, val kind: DeviceKind)
 
-enum class DeviceKind { OURA_RING, LIBRE_SENSOR, DEXCOM_SENSOR }
+enum class DeviceKind {
+    OURA_RING,
+    LIBRE_SENSOR,
+    DEXCOM_SENSOR,
+
+    /**
+     * Any peripheral speaking the SIG standard GATT profiles (Heart Rate
+     * 0x180D, Battery 0x180F, Health Thermometer 0x1809, Pulse Oximeter
+     * 0x1822).
+     *
+     * Not a vendor: one kind covers Fitbit Charge 6, Fitbit Air, Pixel Watch
+     * 2+, Polar, Wahoo, Garmin straps and generic oximeters, because the
+     * protocol is published rather than reverse-engineered.
+     */
+    HEART_RATE_MONITOR,
+
+    /**
+     * A Fitbit tracker's own sync protocol — activity, sleep and stored
+     * history. Blocked; see [SupportMatrix]. Distinct from
+     * [HEART_RATE_MONITOR], which is how a Fitbit is actually reachable.
+     */
+    FITBIT_TRACKER,
+
+    /**
+     * A Pixel Watch as a full companion device. Blocked; see [SupportMatrix].
+     * Its heart rate is reachable via [HEART_RATE_MONITOR].
+     */
+    PIXEL_WATCH,
+}
 
 data class DiscoveredDevice(
     val id: DeviceId,

@@ -24,3 +24,6 @@ pubspec.lock
 *.jks
 keystore.properties
 secrets.properties
+
+# Kotlin compiler session scratch
+.kotlin/

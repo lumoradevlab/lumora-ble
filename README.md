@@ -25,6 +25,31 @@ supportable and the current one is not.
 | Libre **1 / 2** | **NFC** | Works | Tap to read. Uncalibrated — see the caveat below. |
 | Libre **3** | BLE | Not supported | Needs an Abbott-issued certificate that cannot be synthesized. |
 | Oura Ring 3/4/5 | BLE | Works, with setup | The ring must be factory-reset, giving up the official Oura app for it. |
+| **Standard heart rate** | BLE | Works, with setup | Any SIG-conforming peripheral: Fitbit Charge 6 / Air, Pixel Watch 2+, Polar, Wahoo, Garmin straps. Live values only. |
+| Fitbit **sync protocol** | BLE | Not supported | Encrypted under a per-device key provisioned via Fitbit's cloud. Use standard heart rate instead. |
+| Pixel Watch **companion** | BLE | Not supported | Wear OS device with no GATT surface. Use standard heart rate instead. |
+
+### The standard-profile path
+
+One entry in that table is unlike the others. `HEART_RATE_MONITOR` is built on
+**published Bluetooth SIG profiles** — Heart Rate `0x180D`, Battery `0x180F`,
+Health Thermometer `0x1809`, Pulse Oximeter `0x1822` — not on
+reverse-engineering. So it covers every conforming peripheral with one
+implementation, carries no vendor-ToS exposure, and cannot be broken by a
+firmware update.
+
+It is also how Fitbit and Pixel Watch are actually reachable. Their own sync
+protocols are closed, but **Fitbit Charge 6, Fitbit Air, and Pixel Watch 2+
+broadcast live heart rate over the standard profile** — the same mechanism they
+use to talk to Peloton, Zwift and Strava.
+
+Two constraints worth designing around:
+
+- **Broadcast is user-initiated and session-scoped.** On the watch: swipe down →
+  Connected Fitness → Connect (a Pixel Watch may also need *Extended Pairing*).
+  It is a workout-time broadcast, not a background connection.
+- **Concurrent links are scarce.** A Charge 6 accepts **one**; a Pixel Watch 3+
+  accepts **two**. A watch already connected to gym equipment will refuse.
 
 Two things integrators must not miss: **Libre 1/2 are NFC, not BLE** — they are
 tapped, never scanned — and their readings are **uncalibrated**, so they can
@@ -39,10 +64,12 @@ sdk.supportedDevices
     .forEach { showInPicker(it.kind) }
 ```
 
-**These protocols are unofficial.** No vendor publishes a BLE spec; every
-constant here comes from public reverse-engineering work. Using them violates
-each vendor's terms of service, and any firmware update can break them without
-notice. That is a product and legal decision — make it deliberately.
+**The vendor protocols are unofficial.** No vendor publishes a BLE spec for its
+own devices; every constant in the `oura`, `libre` and `dexcom` modules comes
+from public reverse-engineering work. Using them violates each vendor's terms of
+service, and any firmware update can break them without notice. That is a
+product and legal decision — make it deliberately. The `standard` module is the
+exception: it implements published SIG profiles and carries none of that risk.
 
 ## Install
 
@@ -121,6 +148,7 @@ devices/
   oura/       Nonce/AES-ECB auth, commands, event parsing.
   libre/      Libre 1/2 FRAM parser + NFC reader. (NFC, not BLE.)
   dexcom/     G6 mutual auth, message codecs, glucose decoding.
+  standard/   SIG standard GATT profiles. No auth, no vendor protocol.
 sdk/          Wires it together; encrypted credential storage.
 flutter/      Flutter plugin + example app.
 ```
@@ -151,8 +179,8 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 64 tests
-cd flutter/lumora_ble && flutter test             # Dart, 13 tests
+./gradlew test                                    # native, 83 tests
+cd flutter/lumora_ble && flutter test             # Dart, 15 tests
 ```
 
 ## Not implemented
@@ -163,7 +191,8 @@ cd flutter/lumora_ble && flutter test             # Dart, 13 tests
 - **Cloud fallbacks.** For most products the vendor APIs (Oura Cloud v2,
   LibreLinkUp, Dexcom v3) are the right integration; they are not in this repo
   yet. Note the Dexcom API delays data 1h (US) / 3h (elsewhere) by regulatory
-  design, so it cannot drive live alerts.
+  design, so it cannot drive live alerts. For Fitbit history the route is now
+  the Google Health API — the legacy Fitbit Web API shut down in September 2026.
 - **Dexcom backfill.** The G6 replays stored readings, but that characteristic
   has its own chunked framing that needs a real transmitter to validate. Live
   readings work; history does not.

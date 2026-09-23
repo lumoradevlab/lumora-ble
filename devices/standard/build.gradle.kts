@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.lumora.ble.sdk"
+    namespace = "dev.lumora.ble.standard"
     compileSdk = 35
 
     defaultConfig {
@@ -20,14 +20,8 @@ android {
 }
 
 dependencies {
-    // api, not implementation: consumers of the SDK need the core types.
-    api(project(":core"))
+    implementation(project(":core"))
     implementation(project(":transport"))
-    implementation(project(":devices:oura"))
-    implementation(project(":devices:libre"))
-    implementation(project(":devices:dexcom"))
-    implementation(project(":devices:standard"))
-
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)

@@ -13,10 +13,16 @@ users actually have before planning.
 | Libre **1 / 2** | NFC | **Works** | Tap to read; sensor activated by the official app |
 | Libre **3** | BLE | **Not supported** | Requires an Abbott-issued certificate |
 | Oura Ring 3/4/5 | BLE | **Works, with setup** | Ring must be factory-reset |
+| **Standard GATT profiles** | BLE | **Works, with setup** | Published SIG spec; covers Fitbit Charge 6 / Air, Pixel Watch 2+, Polar, Wahoo, Garmin straps |
+| Fitbit **sync protocol** | BLE | **Not supported** | Per-device key provisioned via Fitbit's cloud |
+| Pixel Watch **companion** | BLE | **Not supported** | Wear OS; no GATT surface to connect to |
 
-No vendor publishes a specification for any of this. Every constant comes from
-reverse-engineering work, using these protocols violates each vendor's terms of
-service, and a firmware update can break them without notice. **For an SDK
+No vendor publishes a specification for its own protocol. Every constant in the
+`oura`, `libre` and `dexcom` modules comes from reverse-engineering work, using
+those protocols violates each vendor's terms of service, and a firmware update
+can break them without notice. The `standard` module is the deliberate exception
+— it implements published Bluetooth SIG profiles, so it carries neither the
+legal exposure nor the fragility. **For an SDK
 shipped to third parties this is a licensing and liability decision, not just a
 technical one** — see "Shipping this" at the bottom.
 
@@ -122,6 +128,114 @@ research cohorts and dedicated hardware, a hard sell for consumers.
 
 Raw samples only — Oura's sleep and readiness scores come from proprietary
 models that do not run on the ring.
+
+## Standard GATT profiles — works, and unlike everything above
+
+Implemented in `devices/standard`.
+
+**This is the only module in the SDK with no reverse-engineering in it.** The
+Bluetooth SIG publishes these profiles, so the UUIDs and payload layouts are
+specified rather than inferred:
+
+| Profile | Service | Measurement characteristic |
+|---|---|---|
+| Heart Rate | `0x180D` | `0x2A37` |
+| Battery | `0x180F` | `0x2A19` |
+| Health Thermometer | `0x1809` | `0x2A1C` |
+| Pulse Oximeter | `0x1822` | `0x2A5F` |
+
+Three consequences follow, and together they are the argument for this module:
+there is **no vendor ToS to violate**, a firmware update **cannot break the
+parsing**, and one implementation covers **every conforming peripheral** rather
+than one vendor. Flow is connect → discover → subscribe → parse. There is no
+authentication step and no credential, which is why `StandardGattConnection`
+takes no `CredentialStore`.
+
+### Why this is the Fitbit and Pixel Watch answer
+
+Both vendors' own protocols are closed (below), but both broadcast live heart
+rate over `0x180D`. Google documents this: **Fitbit Charge 6, Fitbit Air, and
+Pixel Watch 2/3/4/5** support it, and it is how they already drive Peloton,
+Zwift, Strava, Concept2 and Wahoo equipment.
+
+Worth knowing for product scoping: **Samsung Galaxy Watch does not broadcast
+heart rate** — it remains a long-standing open feature request — so this is a
+point of difference for the Google ecosystem rather than a generic wearable
+capability.
+
+Constraints that shape the integration:
+
+- **Broadcast is user-initiated, per session.** Quick Settings → Connected
+  Fitness → Connect. A Pixel Watch may additionally need **Extended Pairing**,
+  which uses a public Bluetooth address and skips the standard pairing flow.
+  This is why the kind is `REQUIRES_SETUP` rather than `SUPPORTED`: a scan that
+  finds nothing usually means the user has not started sharing.
+- **Concurrent connection budget.** Charge 6 allows **one** link; Pixel Watch 3+
+  allows **two**. A watch already talking to a treadmill will refuse.
+- **Live only.** The standard profiles define no stored-history characteristic,
+  so `backfill()` returns an empty list by design rather than throwing.
+- **Battery cost.** Google notes broadcasting measurably shortens battery life.
+
+### Parsing notes
+
+The Heart Rate Measurement layout is variable, driven by its leading flags byte:
+bit 0 selects uint8 vs uint16 BPM, bit 3 adds a 2-byte energy field, bit 4 adds
+RR intervals. **Assuming uint8 is the classic bug** — it yields a
+plausible-but-wrong BPM on a uint16 device and desynchronises every field after
+it, so `StandardGattParsersTest` pins each flag combination explicitly.
+
+RR intervals arrive in units of 1/1024 s and are converted to milliseconds so
+`HeartRateSample.ibiMs` means what its name says. Temperature and SpO2 use
+IEEE-11073 FLOAT/SFLOAT, not IEEE-754 — a detail that silently produces
+nonsense if missed.
+
+Two safety rules: a sample of 0 bpm (or above 300) is dropped rather than
+emitted, and a device that explicitly reports **no sensor contact** has its
+samples dropped. An unworn strap reporting 0 would otherwise surface in a
+consuming app as cardiac arrest.
+
+## Fitbit sync protocol — not supported
+
+Fitbit's own protocol carries what people actually want from a Fitbit: steps,
+sleep stages, and stored history. It is not reachable by a third party.
+
+Authentication runs over Fitbit's "Airlink" protocol — the tracker issues a
+nonce and the authentication key is derived from it together with a per-device
+secret provisioned at manufacture through Fitbit's cloud. Activity payloads are
+themselves encrypted with AES or XTEA under a pre-installed key held only by the
+tracker and Fitbit's servers. **The client never possesses the key material, so
+no amount of protocol work derives it** — the same class of blocker as the Libre
+3 certificate.
+
+The published academic work on this (Edinburgh, 2017-2018) targeted firmware
+that was frequently still operating in plaintext mode. Google has since shipped
+firmware to Charge 6, Sense 2 and Versa 4 explicitly adding "new Bluetooth
+security features" and forcing users to re-pair.
+
+The clearest practical signal: **Gadgetbridge supports 434 device models across
+41 brands — including Xiaomi, Huawei, Amazfit, Garmin and Withings — and lists
+no Fitbit device at all.** That is not an oversight in a project of that scope.
+
+**Use instead:** `HEART_RATE_MONITOR` for live heart rate, or the Google Health
+API for history. Note the timing — the legacy Fitbit Web API shut down in
+**September 2026**; it was a hard cutoff, OAuth tokens did not carry over, and
+the replacement is an aggregation layer over a user's Google account rather than
+a device API.
+
+## Pixel Watch companion — not supported
+
+A Pixel Watch is not a BLE peripheral with a companion protocol to reverse. It
+is a **Wear OS computer**: sensor data lives in on-device Health Services and
+syncs to Google's cloud through the phone's Google Play Services, with no GATT
+surface exposed for a third-party client to connect to. There is no protocol
+here that is merely difficult — there is nothing to connect to.
+
+Reaching a Pixel Watch properly means shipping a **Wear OS app** that reads
+Health Services on the watch itself, which is a different product with a
+different distribution story, or using the **Google Health API** server-side.
+
+**Use instead:** `HEART_RATE_MONITOR`, which works on Pixel Watch 2 and newer
+while the user is broadcasting.
 
 ---
 

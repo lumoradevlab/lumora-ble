@@ -8,6 +8,8 @@ import dev.lumora.ble.dexcom.DexcomConnection
 import dev.lumora.ble.dexcom.DexcomProtocol
 import dev.lumora.ble.oura.OuraConnection
 import dev.lumora.ble.oura.OuraProtocol
+import dev.lumora.ble.standard.StandardGattConnection
+import dev.lumora.ble.standard.StandardGattProfiles
 import dev.lumora.ble.transport.BlePermissions
 import dev.lumora.ble.transport.BleScanner
 import kotlinx.coroutines.CoroutineScope
@@ -67,10 +69,23 @@ internal class LumoraBleImpl(
             }
         }
 
+        // Scanning for a blocked kind would return results we cannot connect
+        // to; fail with the reason instead of letting the user pick one.
+        val support = SupportMatrix.forKind(kind)
+        if (support.status == SupportStatus.BLOCKED) {
+            return flow {
+                throw DeviceException(DeviceError.PairingRequired(
+                    support.limitation ?: "device not supported over BLE"))
+            }
+        }
+
         val services = when (kind) {
             DeviceKind.OURA_RING -> listOf(OuraProtocol.SERVICE)
             DeviceKind.DEXCOM_SENSOR -> listOf(DexcomProtocol.SERVICE)
-            DeviceKind.LIBRE_SENSOR -> emptyList()
+            DeviceKind.HEART_RATE_MONITOR -> StandardGattProfiles.SCANNABLE_SERVICES
+            // Unreachable: guarded above.
+            DeviceKind.LIBRE_SENSOR, DeviceKind.FITBIT_TRACKER,
+            DeviceKind.PIXEL_WATCH -> emptyList()
         }
         // A G6 advertises as "Dexcom" + the last two serial characters, so a
         // configured serial narrows the scan to that one transmitter.
@@ -132,9 +147,19 @@ internal class LumoraBleImpl(
             DexcomConnection(context, scope, config.serial, config.sessionStart)
         }
 
+        // No credential, no handshake — the profiles are published, so this
+        // one implementation serves every conforming peripheral.
+        DeviceKind.HEART_RATE_MONITOR -> StandardGattConnection(context, scope)
+
         // Libre 1/2 are NFC, not BLE — read them with LibreNfcReader instead.
         DeviceKind.LIBRE_SENSOR -> throw DeviceException(DeviceError.ProtocolViolation(
             "Libre sensors are read over NFC, not BLE. Use LibreNfcReader.read(tag)."))
+
+        // Blocked kinds are rejected in connect() before reaching here; this
+        // branch keeps the `when` exhaustive if that guard is ever moved.
+        DeviceKind.FITBIT_TRACKER, DeviceKind.PIXEL_WATCH ->
+            throw DeviceException(DeviceError.PairingRequired(
+                SupportMatrix.forKind(kind).limitation ?: "device not supported"))
     }
 
     /**

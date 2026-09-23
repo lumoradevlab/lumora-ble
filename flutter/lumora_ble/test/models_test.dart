@@ -117,6 +117,34 @@ void main() {
       expect(support.status, SupportStatus.blocked);
       expect(support.isUsable, isFalse);
     });
+
+    test('multi-word kinds survive the SCREAMING_SNAKE_CASE round trip', () {
+      // A name that fails to decode silently falls back to the first enum
+      // value, which would show a heart rate strap as an Oura ring.
+      final hr = DeviceSupport.fromMap({
+        'kind': 'HEART_RATE_MONITOR',
+        'status': 'REQUIRES_SETUP',
+      });
+
+      expect(hr.kind, DeviceKind.heartRateMonitor);
+      expect(hr.isUsable, isTrue);
+    });
+
+    test('vendor-locked kinds decode and report as blocked', () {
+      for (final entry in {
+        'FITBIT_TRACKER': DeviceKind.fitbitTracker,
+        'PIXEL_WATCH': DeviceKind.pixelWatch,
+      }.entries) {
+        final support = DeviceSupport.fromMap({
+          'kind': entry.key,
+          'status': 'BLOCKED',
+          'limitation': 'use HEART_RATE_MONITOR for live heart rate',
+        });
+
+        expect(support.kind, entry.value);
+        expect(support.isUsable, isFalse);
+      }
+    });
   });
 
   group('errors', () {
