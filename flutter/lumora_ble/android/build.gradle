@@ -31,8 +31,11 @@ android {
 }
 
 dependencies {
-    // Published coordinates once the SDK is on Maven; a composite build or a
-    // local path substitution works during development.
+    // These are the coordinates the SDK will publish under. Until it is on
+    // Maven, the host app's settings.gradle substitutes them for the local
+    // Gradle modules via includeBuild — see example/android/settings.gradle.kts.
+    // Substitution rather than a project(":sdk") path keeps this file correct
+    // for consumers who resolve the published artifact.
     implementation "dev.lumora.ble:sdk:0.1.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
 }

@@ -1,6 +1,9 @@
 package dev.lumora.ble.flutter
 
 import dev.lumora.ble.core.*
+// LumoraBle.create is an extension on the companion, declared in the sdk
+// module rather than core, so the wildcard import above does not cover it.
+import dev.lumora.ble.sdk.create
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall

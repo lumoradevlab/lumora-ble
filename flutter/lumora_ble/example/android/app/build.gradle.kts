@@ -19,7 +19,8 @@ android {
         applicationId = "dev.lumora.lumora_ble_example"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // The SDK needs API 26 (BLE + java.time); Flutter's default is lower.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
