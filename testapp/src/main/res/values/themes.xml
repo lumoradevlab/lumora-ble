@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The UI is entirely Compose/MaterialTheme; this exists only so the window
+      has a sane background and no action bar before Compose takes over.
+      Deliberately a framework theme, so the app needs no Material Components
+      XML dependency.
+    -->
+    <style name="Theme.LumoraTest" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
