@@ -27,3 +27,13 @@ secrets.properties
 
 # Kotlin compiler session scratch
 .kotlin/
+
+# Flutter example build scaffolding (regenerate with `flutter create .`)
+flutter/lumora_ble/example/build/
+flutter/lumora_ble/example/.dart_tool/
+flutter/lumora_ble/example/ios/Pods/
+flutter/lumora_ble/example/ios/.symlinks/
+flutter/lumora_ble/example/ios/Flutter/Flutter.podspec
+flutter/lumora_ble/example/ios/Flutter/ephemeral/
+flutter/lumora_ble/example/android/.gradle/
+flutter/lumora_ble/example/android/local.properties
