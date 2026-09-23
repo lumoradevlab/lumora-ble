@@ -24,6 +24,6 @@ flutter:
       android:
         package: dev.lumora.ble.flutter
         pluginClass: LumoraBlePlugin
-      # iOS is not implemented yet — see README. Declaring it here before the
-      # Swift side exists would make `flutter run` fail on iOS with a confusing
-      # missing-symbol error rather than a clear "unsupported platform".
+      ios:
+        pluginClass: LumoraBlePlugin
+        sharedDarwinSource: false

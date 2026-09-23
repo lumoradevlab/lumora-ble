@@ -25,6 +25,14 @@ enum DeviceKind {
   /// A Pixel Watch as a full companion device. Blocked — it is a Wear OS
   /// device with no GATT surface. Live heart rate via [heartRateMonitor].
   pixelWatch,
+
+  /// An Apple Watch, read through HealthKit on iOS.
+  ///
+  /// Unlike every other kind this is not a peripheral the SDK connects to:
+  /// watchOS exposes no BLE service for health data, so there is nothing to
+  /// scan for. Call `connect()` directly to begin observing the store.
+  /// Supported on iOS only; the Android build reports it BLOCKED.
+  appleWatch,
 }
 
 enum SupportStatus { supported, requiresSetup, blocked }
@@ -32,7 +40,15 @@ enum SupportStatus { supported, requiresSetup, blocked }
 /// How a device is reached. Not every supported device is BLE — Libre 1/2 are
 /// NFC — and the difference changes the UX: NFC is a deliberate tap-to-scan,
 /// BLE is a background connection.
-enum Transport { ble, nfc }
+enum Transport {
+  ble,
+  nfc,
+
+  /// An OS-mediated health store rather than a radio link. Nothing to scan
+  /// for and no connection to maintain: the user grants permission once and
+  /// the system delivers data.
+  healthKit,
+}
 
 enum GlucoseTrend {
   risingRapidly,

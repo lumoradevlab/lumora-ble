@@ -33,6 +33,15 @@ enum class DeviceKind {
      * Its heart rate is reachable via [HEART_RATE_MONITOR].
      */
     PIXEL_WATCH,
+
+    /**
+     * An Apple Watch, read through HealthKit.
+     *
+     * Supported by the iOS build only. Present in this enum so both platforms
+     * share one [DeviceKind] vocabulary across the Flutter channel; the
+     * Android [SupportMatrix] reports it BLOCKED.
+     */
+    APPLE_WATCH,
 }
 
 data class DiscoveredDevice(

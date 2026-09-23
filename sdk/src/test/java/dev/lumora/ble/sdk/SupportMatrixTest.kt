@@ -32,7 +32,11 @@ class SupportMatrixTest {
 
     @Test
     fun `vendor-locked kinds are reported blocked, not quietly usable`() {
-        listOf(DeviceKind.FITBIT_TRACKER, DeviceKind.PIXEL_WATCH).forEach { kind ->
+        listOf(
+            DeviceKind.FITBIT_TRACKER,
+            DeviceKind.PIXEL_WATCH,
+            DeviceKind.APPLE_WATCH,
+        ).forEach { kind ->
             assertEquals(SupportStatus.BLOCKED, SupportMatrix.forKind(kind).status)
             assertFalse("$kind must not be offered", SupportMatrix.isUsable(kind))
         }
@@ -62,6 +66,18 @@ class SupportMatrixTest {
             hr.prerequisite!!.contains("Connected Fitness"))
         assertTrue("must warn there is no stored history",
             hr.limitation!!.contains("backfill"))
+    }
+
+    @Test
+    fun `apple watch is a HealthKit kind that this platform cannot reach`() {
+        val watch = SupportMatrix.forKind(DeviceKind.APPLE_WATCH)
+
+        // The transport is the honest signal: not a radio link, and on Android
+        // not reachable at all. The iOS build reports it REQUIRES_SETUP.
+        assertEquals(Transport.HEALTH_KIT, watch.transport)
+        assertEquals(SupportStatus.BLOCKED, watch.status)
+        assertTrue("must say it is the iOS build that supports it",
+            watch.limitation!!.contains("iOS"))
     }
 
     @Test

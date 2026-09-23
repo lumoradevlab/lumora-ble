@@ -85,6 +85,15 @@ object SupportMatrix {
                 "API. Live heart rate is available via HEART_RATE_MONITOR.",
             transport = Transport.BLE,
         ),
+        DeviceSupport(
+            kind = DeviceKind.APPLE_WATCH,
+            status = SupportStatus.BLOCKED,
+            limitation = "Apple Watch is supported by the iOS build only, where it is " +
+                "read through HealthKit. watchOS exposes no BLE service for health " +
+                "data and the watch does not pair with Android at all, so this " +
+                "platform cannot reach it by any route.",
+            transport = Transport.HEALTH_KIT,
+        ),
     )
 
     fun forKind(kind: DeviceKind): DeviceSupport = all.first { it.kind == kind }

@@ -85,7 +85,7 @@ internal class LumoraBleImpl(
             DeviceKind.HEART_RATE_MONITOR -> StandardGattProfiles.SCANNABLE_SERVICES
             // Unreachable: guarded above.
             DeviceKind.LIBRE_SENSOR, DeviceKind.FITBIT_TRACKER,
-            DeviceKind.PIXEL_WATCH -> emptyList()
+            DeviceKind.PIXEL_WATCH, DeviceKind.APPLE_WATCH -> emptyList()
         }
         // A G6 advertises as "Dexcom" + the last two serial characters, so a
         // configured serial narrows the scan to that one transmitter.
@@ -157,7 +157,7 @@ internal class LumoraBleImpl(
 
         // Blocked kinds are rejected in connect() before reaching here; this
         // branch keeps the `when` exhaustive if that guard is ever moved.
-        DeviceKind.FITBIT_TRACKER, DeviceKind.PIXEL_WATCH ->
+        DeviceKind.FITBIT_TRACKER, DeviceKind.PIXEL_WATCH, DeviceKind.APPLE_WATCH ->
             throw DeviceException(DeviceError.PairingRequired(
                 SupportMatrix.forKind(kind).limitation ?: "device not supported"))
     }

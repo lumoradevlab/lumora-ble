@@ -86,6 +86,15 @@ enum class Transport {
 
     /** A tap-to-read exchange, not a persistent connection. */
     NFC,
+
+    /**
+     * An OS-mediated health store rather than a radio link — HealthKit on iOS.
+     *
+     * Changes the UX as sharply as NFC does: there is nothing to scan for and
+     * no connection to maintain. The user grants permission once and the
+     * system delivers data.
+     */
+    HEALTH_KIT,
 }
 
 enum class SupportStatus {

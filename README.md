@@ -4,9 +4,13 @@ One SDK for connecting to health wearables — so an app integrates **once**
 instead of learning three proprietary protocols. Covers BLE (Dexcom G6, Oura)
 and NFC (FreeStyle Libre 1/2) behind a single API.
 
-Usable from **native Android (Kotlin/Java)** and **Flutter**, over a single
-native implementation. The Flutter plugin is a thin binding with no protocol
-logic of its own, so both consumers get identical behaviour.
+Usable from **native Android (Kotlin/Java)** and **Flutter**. The Flutter plugin
+is a thin binding with no protocol logic of its own.
+
+**The two platforms reach different devices, deliberately.** Android implements
+the BLE and NFC protocols; iOS reads Apple Watch data from **HealthKit**, which
+is the only route watchOS offers. `supportedDevices()` reports each platform's
+real capabilities at runtime — check it rather than assuming parity.
 
 > **Read [docs/PROTOCOL-STATUS.md](docs/PROTOCOL-STATUS.md) before planning
 > around this.** Not every generation of every device is supported, and the
@@ -28,6 +32,7 @@ supportable and the current one is not.
 | **Standard heart rate** | BLE | Works, with setup | Any SIG-conforming peripheral: Fitbit Charge 6 / Air, Pixel Watch 2+, Polar, Wahoo, Garmin straps. Live values only. |
 | Fitbit **sync protocol** | BLE | Not supported | Encrypted under a per-device key provisioned via Fitbit's cloud. Use standard heart rate instead. |
 | Pixel Watch **companion** | BLE | Not supported | Wear OS device with no GATT surface. Use standard heart rate instead. |
+| **Apple Watch** | **HealthKit** | Works on **iOS only** | Read from the Health store, not over a radio. Android cannot reach it by any route. |
 
 ### The standard-profile path
 
@@ -151,6 +156,8 @@ devices/
   standard/   SIG standard GATT profiles. No auth, no vendor protocol.
 sdk/          Wires it together; encrypted credential storage.
 flutter/      Flutter plugin + example app.
+  ios/        Swift/HealthKit implementation for Apple Watch. See ios/README.md.
+testapp/      On-device Android harness for the standard GATT path.
 ```
 
 `core` deliberately has no Android Bluetooth imports, so the domain types and the
@@ -185,9 +192,11 @@ cd flutter/lumora_ble && flutter test             # Dart, 15 tests
 
 ## Not implemented
 
-- **iOS.** The Dart API is platform-neutral, but only Android has a native
-  implementation. The iOS platform is intentionally left out of `pubspec.yaml`
-  so it fails with a clear "unsupported platform" instead of a missing symbol.
+- **The BLE protocols on iOS.** iOS now has a native implementation, but it
+  reads Apple Watch data through HealthKit only — the Oura, Dexcom, Libre and
+  standard-GATT paths are Android-only and would each need reimplementing over
+  CoreBluetooth/CoreNFC. `supportedDevices()` returns a genuinely different
+  matrix per platform; check it rather than assuming.
 - **Cloud fallbacks.** For most products the vendor APIs (Oura Cloud v2,
   LibreLinkUp, Dexcom v3) are the right integration; they are not in this repo
   yet. Note the Dexcom API delays data 1h (US) / 3h (elsewhere) by regulatory

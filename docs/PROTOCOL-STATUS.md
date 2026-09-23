@@ -16,6 +16,7 @@ users actually have before planning.
 | **Standard GATT profiles** | BLE | **Works, with setup** | Published SIG spec; covers Fitbit Charge 6 / Air, Pixel Watch 2+, Polar, Wahoo, Garmin straps |
 | Fitbit **sync protocol** | BLE | **Not supported** | Per-device key provisioned via Fitbit's cloud |
 | Pixel Watch **companion** | BLE | **Not supported** | Wear OS; no GATT surface to connect to |
+| **Apple Watch** | **HealthKit** | **Works (iOS build only)** | Read from the Health store; unreachable from Android |
 
 No vendor publishes a specification for its own protocol. Every constant in the
 `oura`, `libre` and `dexcom` modules comes from reverse-engineering work, using
@@ -236,6 +237,59 @@ different distribution story, or using the **Google Health API** server-side.
 
 **Use instead:** `HEART_RATE_MONITOR`, which works on Pixel Watch 2 and newer
 while the user is broadcasting.
+
+## Apple Watch — works, on iOS, and not over a radio
+
+Implemented in `flutter/lumora_ble/ios/Classes`.
+
+**There is no BLE path to an Apple Watch, and this is structural rather than
+difficult.** watchOS exposes no GATT service for health data. The watch pairs
+only with its iPhone, over a proprietary link, and writes into HealthKit on that
+phone. Nothing advertises, so nothing can be scanned for or connected to. It is
+a different kind of blocker from Libre 3 or Fitbit: there is no protocol to
+implement, no key to obtain, and no amount of work that changes it.
+
+The supported route is therefore the **HealthKit store**, which is why
+`Transport.HEALTH_KIT` exists alongside `BLE` and `NFC`. Like the NFC
+distinction, it changes the UX completely: the user grants permission once and
+the system delivers data.
+
+An Apple Watch also **cannot pair with an Android phone at all**, so the Android
+build reports `APPLE_WATCH` as BLOCKED with that reason.
+
+### What the iOS build does and does not do
+
+Only HealthKit. The Oura, Dexcom, Libre and standard-GATT protocols are
+Android-only; porting each means reimplementing it over CoreBluetooth or
+CoreNFC. `IosSupportMatrix` therefore reports a genuinely different matrix from
+the Android `SupportMatrix`, rather than echoing promises the iOS build cannot
+keep.
+
+Read types: heart rate, HRV (SDNN), oxygen saturation, body temperature. An
+anchored query delivers new samples as HealthKit receives them, so each update
+carries only what is new rather than replaying history.
+
+### Three things integrators must not miss
+
+1. **`scan()` fails on iOS**, deliberately and loudly. There are no devices to
+   discover, so returning an empty stream would look like a hardware fault.
+   Call `connect()` directly.
+2. **iOS never reports that read access was denied.** A denied type is
+   indistinguishable from one holding no data — by design, so a user hiding a
+   condition is not itself detectable. **An empty result is never evidence of a
+   permission problem**, and an app must not tell the user otherwise.
+3. **Host-app setup is mandatory and fails hard.** Without
+   `NSHealthShareUsageDescription` in Info.plist, iOS *terminates the process*
+   rather than throwing. The HealthKit capability is also required. See
+   `flutter/lumora_ble/ios/README.md`.
+
+### Where HealthKit beats the BLE path
+
+`backfill()` returns real history. The watch has been recording continuously, so
+stored samples are genuinely available — whereas the standard GATT profiles
+define no history characteristic and return an empty list. Latency is the
+trade: samples arrive in batches as the watch syncs, so this is near-live rather
+than the sub-second cadence of a BLE chest strap.
 
 ---
 
