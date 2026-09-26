@@ -293,6 +293,29 @@ than the sub-second cadence of a BLE chest strap.
 
 ---
 
+## What has been verified on hardware
+
+Distinct from what passes a unit test. Worth stating explicitly: these are
+reverse-engineered protocols, so a green test suite says the code does what its
+author expected, not that a device agrees.
+
+| Path | Verified | Notes |
+|---|---|---|
+| iOS HealthKit | **Yes** | Live heart rate read from a paired Apple Watch |
+| Standard GATT — scan/connect/discover | **Yes** | Real peripheral; a characteristic read parsed correctly |
+| Standard GATT — heart rate parsing | No | Needs a peripheral actually serving `0x2A37` |
+| Oura, Dexcom G6, Libre | No | Needs the respective hardware |
+
+One finding from that testing shaped the code. A peripheral advertising
+`0x180D` connected and served no heart rate service at all — the advertisement
+and the GATT table are independent, and they disagreed. (It was an iPhone:
+iOS does not let a third-party app publish arbitrary GATT services, so an app
+there can advertise a UUID it cannot serve.) `StandardGattConnection` therefore
+branches only on what service discovery returns, and logs the real service list
+on connect so the two can never be confused again.
+
+---
+
 ## Shipping this
 
 This SDK is intended for third-party developers, which raises the stakes above

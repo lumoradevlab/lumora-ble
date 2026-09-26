@@ -157,7 +157,8 @@ devices/
 sdk/          Wires it together; encrypted credential storage.
 flutter/      Flutter plugin + example app.
   ios/        Swift/HealthKit implementation for Apple Watch. See ios/README.md.
-testapp/      On-device Android harness for the standard GATT path.
+  example/    Flutter app exercising whichever path the platform supports.
+testapp/      Native Android harness for the standard GATT path.
 ```
 
 `core` deliberately has no Android Bluetooth imports, so the domain types and the
@@ -186,9 +187,48 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 83 tests
-cd flutter/lumora_ble && flutter test             # Dart, 15 tests
+./gradlew test                                    # native, 84 tests
+cd flutter/lumora_ble && flutter test             # Dart, 17 tests
 ```
+
+### On-device harnesses
+
+Unit tests cover the parsers; they cannot cover a radio or a health store.
+Two harnesses exist for that:
+
+```bash
+./gradlew :testapp:installDebug                   # native Android, BLE path
+cd flutter/lumora_ble/example && flutter run      # Flutter, both platforms
+```
+
+`testapp/` scans for the standard profile and shows discovered devices, live
+readings and a timestamped log. The Flutter example branches by platform: the
+BLE scan on Android, HealthKit authorization and history on iOS.
+
+iOS needs two pieces of host-app setup that fail hard when missing — without
+`NSHealthShareUsageDescription` the process is terminated rather than an error
+thrown. See [flutter/lumora_ble/ios/README.md](flutter/lumora_ble/ios/README.md).
+
+## Verified on hardware
+
+What has actually run against real devices, as opposed to passing a unit test.
+Stated plainly because every protocol here is unofficial, and "compiles" is a
+weaker claim than it looks.
+
+| Path | Status |
+|---|---|
+| iOS HealthKit — Apple Watch | **Verified.** Live heart rate read from a paired watch |
+| Android BLE — scan, connect, discover | **Verified.** Real peripheral, characteristic read parsed |
+| Android BLE — heart rate parsing | **Not yet.** Needs a peripheral serving `0x2A37` |
+| Oura, Dexcom, Libre | **Not yet.** Needs the respective hardware |
+
+`StandardGattParsers` has 16 unit tests covering every flags-byte combination,
+but has not met a live heart rate peripheral. Treat it accordingly.
+
+One lesson from that testing is baked into the SDK: a peripheral can advertise
+a service UUID it does not actually serve. `StandardGattConnection` therefore
+branches on what service discovery returns, never on the advertisement, and
+logs the real GATT table on connect.
 
 ## Not implemented
 
@@ -207,6 +247,12 @@ cd flutter/lumora_ble && flutter test             # Dart, 15 tests
   readings work; history does not.
 - **Libre calibration.** The FRAM path is uncalibrated; sensors carry per-unit
   parameters the official algorithm applies on top.
+- **Maven publication.** The SDK is not published, so the Flutter plugin's
+  declared coordinate `dev.lumora.ble:sdk:0.1.0` is resolved by a composite
+  build in `flutter/lumora_ble/example/android/settings.gradle.kts`. A consumer
+  outside this repository needs that substitution, or the published artifact.
+  Note the composite build pins the example to the SDK's AGP and Kotlin
+  versions — Gradle refuses two Android Gradle Plugin versions in one build.
 
 ## Licence
 
