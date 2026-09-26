@@ -134,6 +134,22 @@ package, so every developer on your team needs a personal access token with
 `read:packages`, and so does your CI. That is why it is an interim step rather
 than the destination — Maven Central needs no token at all.
 
+It does earn its keep beyond convenience, though: publishing there exercises
+the same POM generation Maven Central will validate, while a version is still
+free to be replaced. Central publications are permanent.
+
+**Maven Central readiness.** The POMs already carry every field Central
+requires — `name`, `description`, `url`, `licenses`, `scm`, `developers` —
+and sources jars are attached. GPG signing is wired and activates when a key
+is supplied:
+
+```bash
+./gradlew publish   -PsigningInMemoryKey="$(cat private-key.asc)"   -PsigningInMemoryKeyPassword=<passphrase>
+```
+
+What remains is account work rather than build work: a Sonatype account,
+namespace verification for `dev.lumora.ble`, and a published GPG key.
+
 What neither option requires is a Gradle composite build. `includeBuild` pulls
 this repository's whole build into yours, and Gradle refuses two Android
 Gradle Plugin versions in one build, so it would pin your app's toolchain to

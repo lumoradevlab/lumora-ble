@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     `maven-publish`
+    signing
 }
 
 // :sdk depends on this module, so its POM references these coordinates. Left
@@ -80,6 +81,9 @@ publishing {
 
             pom {
                 name.set("Lumora BLE ${project.name}")
+                description.set(
+                    "Oura Ring protocol for the Lumora BLE SDK. Reverse-engineered and unofficial; using it violates Oura Health's terms of service."
+                )
                 url.set("https://github.com/lumoradevlab/BLE-Android")
                 licenses {
                     license {
@@ -87,7 +91,37 @@ publishing {
                         url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
                     }
                 }
+                // scm and developers are not decoration: Maven Central
+                // rejects a POM without them. Declared now so the metadata is
+                // validated against GitHub Packages before Central makes a
+                // published version permanent.
+                developers {
+                    developer {
+                        id.set("lumoradevlab")
+                        name.set("Lumora")
+                        url.set("https://github.com/lumoradevlab")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/lumoradevlab/BLE-Android")
+                    connection.set(
+                        "scm:git:https://github.com/lumoradevlab/BLE-Android.git")
+                    developerConnection.set(
+                        "scm:git:ssh://git@github.com/lumoradevlab/BLE-Android.git")
+                }
             }
         }
+    }
+}
+
+// Maven Central requires every artifact to be GPG-signed. Configured to
+// activate only when a key is present, so local builds and GitHub Packages
+// publishing — neither of which needs signatures — are unaffected.
+signing {
+    val key = providers.gradleProperty("signingInMemoryKey").orNull
+    val password = providers.gradleProperty("signingInMemoryKeyPassword").orNull
+    if (key != null) {
+        useInMemoryPgpKeys(key, password)
+        sign(publishing.publications)
     }
 }
