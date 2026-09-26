@@ -120,6 +120,9 @@ enum DeviceReading {
     case battery(percent: Int, charging: Bool, timestamp: Date)
     case temperature(celsius: Double, timestamp: Date)
     case spO2(percent: Double, timestamp: Date)
+    /// SDNN in milliseconds — a statistic over a window, not a raw interval,
+    /// which is why it is not folded into `heartRate`'s ibiMs.
+    case heartRateVariability(sdnnMs: Double, timestamp: Date)
 
     func toMap() -> [String: Any?] {
         switch self {
@@ -132,6 +135,8 @@ enum DeviceReading {
             return ["type": "temperature", "timestamp": ts.millis, "celsius": celsius]
         case .spO2(let percent, let ts):
             return ["type": "spO2", "timestamp": ts.millis, "percent": percent]
+        case .heartRateVariability(let sdnn, let ts):
+            return ["type": "hrv", "timestamp": ts.millis, "sdnnMs": sdnn]
         }
     }
 }

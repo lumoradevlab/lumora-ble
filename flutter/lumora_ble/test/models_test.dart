@@ -57,6 +57,33 @@ void main() {
       expect(reading.trend, GlucoseTrend.unknown);
     });
 
+    test('decodes SpO2 from either platform spelling', () {
+      // The Kotlin side sends 'spo2', the Swift side 'spO2'. Accepting only
+      // one threw FormatException on the first real sample from that platform.
+      for (final wire in ['spo2', 'spO2']) {
+        final r = DeviceReading.fromMap({
+          'type': wire,
+          'timestamp': 0,
+          'percent': 97.5,
+        });
+        expect(r, isA<SpO2Reading>());
+        expect((r as SpO2Reading).percent, 97.5);
+      }
+    });
+
+    test('decodes HRV as its own type, not a zero-bpm heart rate', () {
+      // SDNN used to ride inside HeartRateReading.ibiMs, which made HRV
+      // indistinguishable from a heart-rate sample in a consuming app.
+      final r = DeviceReading.fromMap({
+        'type': 'hrv',
+        'timestamp': 0,
+        'sdnnMs': 42.3,
+      });
+
+      expect(r, isA<HeartRateVariabilityReading>());
+      expect((r as HeartRateVariabilityReading).sdnnMs, 42.3);
+    });
+
     test('throws on an unknown reading type', () {
       expect(
         () => DeviceReading.fromMap({'type': 'mystery', 'timestamp': 0}),

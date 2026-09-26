@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lumora_ble/lumora_ble.dart';
 
 void main() => runApp(const ExampleApp());
@@ -36,6 +37,9 @@ class _HomePageState extends State<HomePage> {
   final _found = <DiscoveredDevice>[];
   final _log = <String>[];
   final _latest = <String, String>{};
+  /// How many samples of each type have arrived. Without this the card shows
+  /// one row per type and 200 readings look identical to one.
+  final _counts = <String, int>{};
 
   StreamSubscription<DiscoveredDevice>? _scanSub;
   StreamSubscription<DeviceReading>? _readingSub;
@@ -74,11 +78,9 @@ class _HomePageState extends State<HomePage> {
 
   void _onReading(DeviceReading reading) {
     final entry = switch (reading) {
-      HeartRateReading r when r.bpm > 0 => ('Heart rate', '${r.bpm} bpm'),
-      // HealthKit sends HRV as an interval with no bpm; a BLE strap sends
-      // bpm plus real RR intervals. Both land here.
-      HeartRateReading r when r.ibiMs.isNotEmpty =>
-        ('HRV (SDNN)', '${r.ibiMs.first} ms'),
+      HeartRateReading r => ('Heart rate', '${r.bpm} bpm'),
+      HeartRateVariabilityReading r =>
+        ('HRV (SDNN)', '${r.sdnnMs.toStringAsFixed(1)} ms'),
       SpO2Reading r => ('Blood oxygen', '${r.percent.toStringAsFixed(1)}%'),
       TemperatureReading r =>
         ('Body temperature', '${r.celsius.toStringAsFixed(2)} °C'),
@@ -86,7 +88,10 @@ class _HomePageState extends State<HomePage> {
       GlucoseReading r => ('Glucose', '${r.mgdl} mg/dL'),
       _ => ('Reading', reading.runtimeType.toString()),
     };
-    setState(() => _latest[entry.$1] = entry.$2);
+    setState(() {
+      _counts.update(entry.$1, (n) => n + 1, ifAbsent: () => 1);
+      _latest[entry.$1] = entry.$2;
+    });
     _say('${entry.$1}: ${entry.$2}');
   }
 
@@ -100,25 +105,67 @@ class _HomePageState extends State<HomePage> {
         rssi: 0,
       ));
       setState(() => _observing = true);
-      _say('observing HealthKit — new samples will appear as the watch syncs');
-      _say('note: iOS never reports denied read access, so no data is not '
-          'proof of a permission problem');
+      _say('observing HealthKit for new samples');
+      // Observing alone can look broken: the watch syncs in batches, so nothing
+      // arrives for minutes. Loading recent history immediately is what shows
+      // the path actually works.
+      await _backfill();
     } catch (e) {
       _say('connect failed: ${_describe(e)}');
     }
   }
 
-  Future<void> _backfill() async {
-    final since = DateTime.now().subtract(const Duration(hours: 24));
-    _say('reading the last 24h from HealthKit…');
+  /// Asks the native side why a read came back empty.
+  ///
+  /// iOS-only and deliberately not part of the public SDK surface: it exists to
+  /// make an empty HealthKit result diagnosable rather than mysterious.
+  Future<void> _diagnose() async {
+    try {
+      const channel = MethodChannel('dev.lumora.ble/methods');
+      final raw = await channel.invokeMethod<Map<Object?, Object?>>(
+          'healthKitDiagnostics');
+      if (raw == null) return;
+      _say('healthkit available: ${raw["available"]}');
+      final auth = raw['authorization'] as Map<Object?, Object?>?;
+      auth?.forEach((k, v) => _say('  $k → $v'));
+      final counts = raw['lastReadCounts'] as Map<Object?, Object?>?;
+      if (counts != null && counts.isNotEmpty) {
+        counts.forEach((k, v) => _say('  raw samples $k: $v'));
+      }
+    } catch (e) {
+      _say('diagnostics unavailable: ${_describe(e)}');
+    }
+  }
+
+  Future<void> _backfill({Duration window = const Duration(hours: 24)}) async {
+    final since = DateTime.now().subtract(window);
+    _say('reading the last ${window.inHours}h from HealthKit…');
     try {
       final readings = await _sdk.backfill(
         const DeviceId(address: 'healthkit', kind: DeviceKind.appleWatch),
         since,
       );
-      _say('backfill returned ${readings.length} samples');
-      for (final r in readings.take(5)) {
-        _onReading(r);
+      // Per-type counts, because one row per label in the card above hides how
+      // many samples actually arrived — and a type with zero is the useful
+      // signal, not the ones that worked.
+      final byType = <String, int>{};
+      for (final r in readings) {
+        byType.update(r.runtimeType.toString(), (n) => n + 1, ifAbsent: () => 1);
+      }
+      byType.forEach((type, n) => _say('  $type: $n samples'));
+      await _diagnose();
+
+      if (readings.isEmpty) {
+        _say('backfill returned 0 samples');
+        _say('iOS never reports denied read access, so this is not proof of a '
+            'permission problem — check Health › Browse › Heart › Heart Rate. '
+            'Data there but not here means the per-type toggles were left off.');
+      } else {
+        _say('backfill returned ${readings.length} samples');
+        // Newest last from the query, so show the most recent values.
+        for (final r in readings.reversed.take(8)) {
+          _onReading(r);
+        }
       }
     } catch (e) {
       _say('backfill failed: ${_describe(e)}');
@@ -201,6 +248,14 @@ class _HomePageState extends State<HomePage> {
                 onPressed: _backfill,
                 child: const Text('Read last 24 hours'),
               ),
+              const SizedBox(height: 8),
+              // SpO2, HRV and body temperature are sampled on a schedule rather
+              // than continuously, so a 24h window can legitimately contain
+              // none. A week distinguishes "not granted" from "not measured".
+              OutlinedButton(
+                onPressed: () => _backfill(window: const Duration(days: 7)),
+                child: const Text('Read last 7 days'),
+              ),
             ] else
               FilledButton(
                 onPressed: _toggleScan,
@@ -222,7 +277,7 @@ class _HomePageState extends State<HomePage> {
                       ..._latest.entries.map((e) => Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(e.key),
+                              Text('${e.key}  (${_counts[e.key] ?? 0})'),
                               Text(e.value,
                                   style: const TextStyle(
                                       fontFamily: 'monospace',

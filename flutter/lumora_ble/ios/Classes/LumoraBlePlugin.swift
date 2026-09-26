@@ -79,6 +79,14 @@ public class LumoraBlePlugin: NSObject, FlutterPlugin {
             emitConnection(status: "DISCONNECTED")
             result(nil)
 
+        // Explains an empty read: which types were requested, and how many raw
+        // samples each returned. Without this, "0 samples" is unattributable.
+        case "healthKitDiagnostics":
+            var out: [String: Any] = ["available": health.isAvailable]
+            out["authorization"] = health.diagnostics()
+            out["lastReadCounts"] = health.lastReadCounts
+            result(out)
+
         case "backfill":
             let args = call.arguments as? [String: Any]
             let sinceMs = (args?["since"] as? NSNumber)?.doubleValue ?? 0

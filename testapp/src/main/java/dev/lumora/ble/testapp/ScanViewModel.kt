@@ -126,6 +126,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         is DeviceReading.Battery -> "Battery" to "${level.percent}%"
         is DeviceReading.Temperature -> "Temperature" to "%.2f °C".format(celsius)
         is DeviceReading.SpO2 -> "SpO2" to "%.1f%%".format(percent)
+        is DeviceReading.HeartRateVariability -> "HRV (SDNN)" to "%.1f ms".format(sdnnMs)
         is DeviceReading.Glucose -> "Glucose" to "${reading.mgdl} mg/dL ${reading.trend.name}"
     }
 

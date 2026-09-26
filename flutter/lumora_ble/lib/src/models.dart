@@ -189,9 +189,15 @@ sealed class DeviceReading {
           timestamp: ts,
           celsius: (map['celsius'] as num).toDouble(),
         ),
-      'spo2' => SpO2Reading(
+      // Accept both spellings: the Kotlin side sends 'spo2', the Swift side
+      // 'spO2'. Rejecting one would have thrown FormatException on real data.
+      'spo2' || 'spO2' => SpO2Reading(
           timestamp: ts,
           percent: (map['percent'] as num).toDouble(),
+        ),
+      'hrv' => HeartRateVariabilityReading(
+          timestamp: ts,
+          sdnnMs: (map['sdnnMs'] as num).toDouble(),
         ),
       final other => throw FormatException('unknown reading type: $other'),
     };
@@ -258,6 +264,20 @@ class SpO2Reading extends DeviceReading {
       : super(timestamp);
 
   final double percent;
+}
+
+/// Heart rate variability as a single SDNN figure in milliseconds.
+///
+/// Separate from [HeartRateReading.ibiMs], which carries raw beat-to-beat
+/// intervals: SDNN is a statistic over a window. Folding the two together made
+/// HRV indistinguishable from a heart-rate sample in a consuming app.
+class HeartRateVariabilityReading extends DeviceReading {
+  const HeartRateVariabilityReading({
+    required DateTime timestamp,
+    required this.sdnnMs,
+  }) : super(timestamp);
+
+  final double sdnnMs;
 }
 
 /// Connection lifecycle, mirroring the native sealed interface.

@@ -268,5 +268,7 @@ internal fun DeviceReading.toMap(): Map<String, Any?> {
         )
         is DeviceReading.Temperature -> mapOf("type" to "temperature", "celsius" to celsius)
         is DeviceReading.SpO2 -> mapOf("type" to "spo2", "percent" to percent)
+        is DeviceReading.HeartRateVariability ->
+            mapOf("type" to "hrv", "sdnnMs" to sdnnMs)
     }
 }

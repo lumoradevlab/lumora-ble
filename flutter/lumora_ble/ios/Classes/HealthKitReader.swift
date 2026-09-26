@@ -29,6 +29,11 @@ final class HealthKitReader {
     private let store = HKHealthStore()
     private var activeQueries: [HKQuery] = []
 
+    /// Raw sample count from the most recent backfill, per type identifier.
+    /// -1 means the query itself errored. Surfaced so an empty overall result
+    /// can be attributed to a specific type rather than guessed at.
+    private(set) var lastReadCounts: [String: Int] = [:]
+
     /// Quantity types this SDK reads, paired with the reading each becomes.
     private static let readTypes: [HKQuantityTypeIdentifier] = [
         .heartRate,
@@ -105,6 +110,31 @@ final class HealthKitReader {
         activeQueries.removeAll()
     }
 
+    /// Per-type diagnostics for an empty read.
+    ///
+    /// `authorizationStatus` reports only what the app asked for, never whether
+    /// the user granted it — iOS withholds that distinction deliberately. So
+    /// `.sharingDenied` here means "we never requested it", which IS actionable,
+    /// while `.sharingAuthorized` still tells us nothing about read access.
+    /// Reported so an empty result can be attributed rather than guessed at.
+    func diagnostics() -> [String: String] {
+        guard isAvailable else { return ["healthKit": "unavailable on this device"] }
+        var out: [String: String] = [:]
+        for identifier in Self.readTypes {
+            guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else {
+                out[identifier.rawValue] = "type unavailable"
+                continue
+            }
+            out[identifier.rawValue] = switch store.authorizationStatus(for: type) {
+            case .notDetermined: "not requested yet"
+            case .sharingDenied: "request not granted for sharing"
+            case .sharingAuthorized: "requested"
+            @unknown default: "unknown"
+            }
+        }
+        return out
+    }
+
     /// Pulls stored history. This is where HealthKit genuinely outperforms the
     /// BLE path: the watch has been recording continuously, so a backfill
     /// returns real history rather than the empty list a standard GATT
@@ -115,8 +145,16 @@ final class HealthKitReader {
         var collected: [DeviceReading] = []
         for identifier in Self.readTypes {
             guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { continue }
-            let samples = try await query(type: type, since: since)
-            collected += samples.compactMap { Self.reading(from: $0, identifier: identifier) }
+            // One type failing must not abort the rest: a watch may have heart
+            // rate but no SpO2, and an error on the latter should not hide the
+            // former. Per-type counts go back to the caller for the same reason.
+            do {
+                let samples = try await query(type: type, since: since)
+                lastReadCounts[identifier.rawValue] = samples.count
+                collected += samples.compactMap { Self.reading(from: $0, identifier: identifier) }
+            } catch {
+                lastReadCounts[identifier.rawValue] = -1
+            }
         }
         return collected.sorted { $0.timestamp < $1.timestamp }
     }
@@ -158,12 +196,12 @@ final class HealthKitReader {
             return .heartRate(bpm: Int(bpm.rounded()), ibiMs: [], timestamp: timestamp)
 
         case .heartRateVariabilitySDNN:
-            // SDNN is a millisecond variability figure, not an interval series.
-            // It rides in ibiMs as a single value rather than being dropped,
-            // since it is the only beat-interval information the watch exposes.
+            // Its own reading type: encoding SDNN as a zero-bpm heart rate made
+            // HRV indistinguishable from a heart-rate sample downstream, so it
+            // never showed up separately in a consuming app.
             let ms = sample.quantity.doubleValue(for: .secondUnit(with: .milli))
             guard ms > 0 else { return nil }
-            return .heartRate(bpm: 0, ibiMs: [Int(ms.rounded())], timestamp: timestamp)
+            return .heartRateVariability(sdnnMs: ms, timestamp: timestamp)
 
         case .oxygenSaturation:
             // HealthKit stores this as a 0..1 fraction; the SDK reports percent.
@@ -181,6 +219,8 @@ final class HealthKitReader {
     }
     #else
     var isAvailable: Bool { false }
+    var lastReadCounts: [String: Int] { [:] }
+    func diagnostics() -> [String: String] { ["healthKit": "not compiled in"] }
     func requestAuthorization() async throws -> Bool { false }
     func startObserving(onReading: @escaping (DeviceReading) -> Void) throws {}
     func stopObserving() {}
@@ -192,7 +232,8 @@ private extension DeviceReading {
     var timestamp: Date {
         switch self {
         case .heartRate(_, _, let ts), .battery(_, _, let ts),
-             .temperature(_, let ts), .spO2(_, let ts):
+             .temperature(_, let ts), .spO2(_, let ts),
+             .heartRateVariability(_, let ts):
             return ts
         }
     }

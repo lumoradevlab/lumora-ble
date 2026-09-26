@@ -120,4 +120,17 @@ sealed interface DeviceReading {
     data class Battery(val level: BatteryLevel, override val timestamp: Instant) : DeviceReading
     data class Temperature(val celsius: Double, override val timestamp: Instant) : DeviceReading
     data class SpO2(val percent: Double, override val timestamp: Instant) : DeviceReading
+
+    /**
+     * Heart rate variability as a single SDNN figure in milliseconds.
+     *
+     * Distinct from [HeartRate.sample] and its `ibiMs`: those are raw
+     * beat-to-beat intervals, whereas this is a statistic computed over a
+     * window. Folding SDNN into `ibiMs` made HRV indistinguishable from a
+     * heart-rate sample downstream, which is why it has its own type.
+     */
+    data class HeartRateVariability(
+        val sdnnMs: Double,
+        override val timestamp: Instant,
+    ) : DeviceReading
 }
