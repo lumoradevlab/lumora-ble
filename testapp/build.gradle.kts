@@ -35,9 +35,6 @@ dependencies {
     implementation(project(":sdk"))
     // Protocols are opt-in: the harness depends on the one it installs.
     implementation(project(":devices:standard"))
-    // :sdk depends on :transport with `implementation`, so BlePermissions is
-    // not visible transitively. The harness needs it to prompt for permissions.
-    implementation(project(":transport"))
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

@@ -60,6 +60,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     fun permissionsGranted(): Boolean = sdk.requestPermissions()
 
+    /** Surfaced from the SDK so the UI needs no transport-module dependency. */
+    val requiredPermissions: Array<String> get() = sdk.requiredPermissions
+
     /**
      * Scans for standard-profile peripherals.
      *

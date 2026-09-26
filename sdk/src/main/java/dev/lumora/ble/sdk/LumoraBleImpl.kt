@@ -77,6 +77,8 @@ internal class LumoraBleImpl(
 
     override fun requestPermissions(): Boolean = BlePermissions.allGranted(context)
 
+    override val requiredPermissions: Array<String> get() = BlePermissions.required()
+
     override fun scan(kind: DeviceKind): Flow<DiscoveredDevice> {
         if (!BlePermissions.allGranted(context)) {
             return flow {

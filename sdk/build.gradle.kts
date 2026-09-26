@@ -20,7 +20,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        // These modules are part of the library and legitimately use the
+        // shared transport plumbing. A consumer hits the opt-in error instead.
+        freeCompilerArgs += "-opt-in=dev.lumora.ble.core.InternalLumoraApi"
+    }
 
     // Required for maven-publish to find a `release` component.
     publishing {

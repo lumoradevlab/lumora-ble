@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.lumora.ble.core.ConnectionState
 import dev.lumora.ble.core.DiscoveredDevice
-import dev.lumora.ble.transport.BlePermissions
 import timber.log.Timber
 
 /**
@@ -47,11 +46,11 @@ class MainActivity : ComponentActivity() {
                 ) { granted = vm.permissionsGranted() }
 
                 LaunchedEffect(Unit) {
-                    if (!granted) launcher.launch(BlePermissions.required())
+                    if (!granted) launcher.launch(vm.requiredPermissions)
                 }
 
                 Surface(Modifier.fillMaxSize()) {
-                    HarnessScreen(vm, granted) { launcher.launch(BlePermissions.required()) }
+                    HarnessScreen(vm, granted) { launcher.launch(vm.requiredPermissions) }
                 }
             }
         }

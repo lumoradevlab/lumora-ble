@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
 import dev.lumora.ble.core.DeviceError
+import dev.lumora.ble.core.InternalLumoraApi
 import dev.lumora.ble.core.DeviceException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +36,15 @@ data class Notification(val characteristic: UUID, val value: ByteArray) {
  * Owns the GATT client for its whole lifetime and guarantees `close()` on every
  * exit path — the old code leaked one client per scan result, which exhausts the
  * ~32-interface cap and produces permanent status-133 failures.
+ *
+ * **Not part of the public API.** This is plumbing shared between the device
+ * modules, so it cannot be `internal` — Kotlin scopes that to one compilation
+ * module and three separate device modules use it. Encapsulation comes from
+ * Gradle instead: every module declares `:transport` with `implementation`, so
+ * it resolves at runtime scope and never reaches a consumer's compile
+ * classpath. Treat its signature as free to change without a major version.
  */
+@InternalLumoraApi
 @SuppressLint("MissingPermission")
 class GattConnection(
     private val context: Context,

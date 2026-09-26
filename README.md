@@ -254,6 +254,26 @@ iOS needs two pieces of host-app setup that fail hard when missing — without
 `NSHealthShareUsageDescription` the process is terminated rather than an error
 thrown. See [flutter/lumora_ble/ios/README.md](flutter/lumora_ble/ios/README.md).
 
+## What is public API
+
+Binary compatibility is promised for the `core` module only — the `LumoraBle`
+interface and the types it exposes. Everything else is plumbing.
+
+That boundary is enforced by Gradle rather than by Kotlin's `internal`, which
+scopes to a single compilation module: `GattConnection` is shared by three
+device modules, so marking it `internal` would not compile. Instead every
+module declares `:transport` with `implementation`, so it resolves at runtime
+scope and never reaches a consumer's compile classpath — importing
+`dev.lumora.ble.transport.GattConnection` from an app does not resolve. The
+shared plumbing is additionally marked `@InternalLumoraApi`, an opt-in
+annotation that fails compilation with an explanatory message for anyone who
+adds a direct dependency to bypass the scoping.
+
+Practical consequence: the SDK must expose everything a consumer legitimately
+needs, because they cannot reach around it. `LumoraBle.requiredPermissions`
+exists for exactly that reason — `requestPermissions()` only reports status,
+so without it an app could not prompt at all.
+
 ## Verified on hardware
 
 What has actually run against real devices, as opposed to passing a unit test.

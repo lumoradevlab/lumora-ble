@@ -72,9 +72,24 @@ interface LumoraBle {
      * True if every runtime permission BLE needs is granted.
      *
      * This only reports status; prompting requires an Activity, so the host app
-     * (or the Flutter plugin's activity binding) must request them.
+     * (or the Flutter plugin's activity binding) must request them — pass
+     * [requiredPermissions] to your permission launcher.
      */
     fun requestPermissions(): Boolean
+
+    /**
+     * The runtime permissions this build needs, for the host app's permission
+     * launcher.
+     *
+     * Exposed here because [requestPermissions] only reports status, so
+     * without it a consumer could not prompt at all without reaching into the
+     * transport module — which is not on their compile classpath by design.
+     *
+     * The set differs by API level: 31+ uses BLUETOOTH_SCAN/BLUETOOTH_CONNECT,
+     * below that ACCESS_FINE_LOCATION, without which scans silently return
+     * nothing.
+     */
+    val requiredPermissions: Array<String>
 
     /**
      * Disconnects everything and releases the SDK's internal coroutine scope.
