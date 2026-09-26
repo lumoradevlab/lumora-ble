@@ -51,6 +51,30 @@ dependencies {
 // software component is created by the Android plugin during this project's
 // own evaluation, so a root-level afterEvaluate cannot see it.
 publishing {
+    repositories {
+        // GitHub Packages, as an interim target until the SDK is on Maven
+        // Central. Far less setup than Sonatype — no namespace verification,
+        // no GPG signing — but note the asymmetry it imposes on consumers:
+        // GitHub Packages requires authentication even to READ a public
+        // package, so every integrator needs a token. That is the reason it
+        // is interim rather than the destination.
+        //
+        // Credentials come from gradle.properties or the environment, never
+        // the repository:
+        //   ./gradlew publishAllPublicationsToGitHubPackagesRepository \
+        //     -PgithubUser=<user> -PgithubToken=<token>
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+            credentials {
+                username = (project.findProperty("githubUser") as String?)
+                    ?: System.getenv("GITHUB_ACTOR")
+                password = (project.findProperty("githubToken") as String?)
+                    ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+
     publications {
         register<MavenPublication>("maven") {
             afterEvaluate { from(components["release"]) }

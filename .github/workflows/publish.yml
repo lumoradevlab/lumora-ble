@@ -1,0 +1,38 @@
+name: Publish to GitHub Packages
+
+# Manual, and on a release tag. Not on every push: publishing is
+# outward-facing and a re-run would overwrite a version consumers may
+# already have resolved.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Publishing a build whose tests fail would put a known-broken
+      # artifact where consumers resolve it.
+      - name: Test
+        run: ./gradlew test
+
+      - name: Publish
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository
+        env:
+          # Provided by Actions; no secret to configure.
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

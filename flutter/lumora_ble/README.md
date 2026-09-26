@@ -149,9 +149,39 @@ tell the user their permissions are wrong on that basis.
 ## Android setup
 
 `minSdk 26`. The plugin declares the Bluetooth permissions; your app requests
-them at runtime. Do not add a Gradle composite build for this plugin — it
-resolves from Maven, and `includeBuild` would pin your app's AGP and Kotlin
-versions to the SDK's.
+them at runtime.
+
+The plugin's Android side resolves `dev.lumora.ble:*` from a Maven repository.
+Until those are on Maven Central, add one of these to
+`android/build.gradle.kts`:
+
+```kotlin
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+
+        // Either: built locally with ./gradlew publishToMavenLocal
+        mavenLocal()
+
+        // Or: GitHub Packages. Note this needs a personal access token with
+        // read:packages even though the repository is public.
+        maven {
+            url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+            credentials {
+                username = providers.gradleProperty("githubUser").get()
+                password = providers.gradleProperty("githubToken").get()
+            }
+        }
+    }
+}
+```
+
+**Do not add a Gradle composite build for this plugin.** `includeBuild` pulls
+the SDK's whole build into yours, and Gradle refuses two Android Gradle Plugin
+versions in one build — your app's AGP and Kotlin would be pinned to the SDK's.
+This is the most common way a Flutter plugin integration breaks. Resolving
+real artifacts avoids it entirely.
 
 ## These protocols are unofficial
 

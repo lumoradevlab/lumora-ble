@@ -97,6 +97,50 @@ dependencies {
 }
 ```
 
+### Where the artifacts live
+
+Not on Maven Central yet. Until then there are two options, and the trade-off
+is worth stating plainly.
+
+**Build it locally** — no accounts, no tokens:
+
+```bash
+git clone https://github.com/lumoradevlab/BLE-Android
+cd BLE-Android && ./gradlew publishToMavenLocal
+```
+
+then add `mavenLocal()` to your repositories. This is the simplest route for
+trying the SDK, and what the CI for this repository does.
+
+**GitHub Packages** — for a team that wants a shared remote. Published by
+`.github/workflows/publish.yml` on a GitHub release, or manually via
+`workflow_dispatch`; consumers add:
+
+```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+        credentials {
+            // Never commit these. Put them in ~/.gradle/gradle.properties.
+            username = providers.gradleProperty("githubUser").get()
+            password = providers.gradleProperty("githubToken").get()
+        }
+    }
+}
+```
+
+**The catch:** GitHub Packages requires authentication even to *read* a public
+package, so every developer on your team needs a personal access token with
+`read:packages`, and so does your CI. That is why it is an interim step rather
+than the destination — Maven Central needs no token at all.
+
+What neither option requires is a Gradle composite build. `includeBuild` pulls
+this repository's whole build into yours, and Gradle refuses two Android
+Gradle Plugin versions in one build, so it would pin your app's toolchain to
+ours. Resolving real artifacts — from `mavenLocal()` or GitHub Packages —
+keeps your AGP and Kotlin versions yours; verified against AGP 9.0.1 / Kotlin
+2.3.20 while this repository builds with 8.7.3 / 2.1.0.
+
 This is a legal boundary as much as a packaging one. Bundling every protocol
 would impose Dexcom's, Ōura's and Abbott's terms on an app that only wanted a
 standard heart rate strap, so `:sdk` depends on no device module on any
