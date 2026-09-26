@@ -31,13 +31,16 @@ android {
 }
 
 dependencies {
-    // These are the coordinates the SDK will publish under. Until it is on
-    // Maven, the host app's settings.gradle substitutes them for the local
-    // Gradle modules via includeBuild — see example/android/settings.gradle.kts.
-    // Substitution rather than a project(":sdk") path keeps this file correct
-    // for consumers who resolve the published artifact.
+    // Resolved from a Maven repository like any other dependency. The plugin
+    // deliberately does NOT use a composite build: includeBuild would drag the
+    // SDK's own Gradle build into the consumer's, and Gradle forbids two
+    // Android Gradle Plugin versions in one build — pinning every integrating
+    // app to this repository's AGP and Kotlin versions. Publishing real
+    // artifacts is what keeps the consumer free to choose their own.
+    //
     // The Flutter distribution bundles every protocol: a Dart consumer cannot
-    // express a per-protocol Gradle dependency the way a native one can.
+    // express a per-protocol Gradle dependency the way a native one can, so
+    // the vendor terms-of-service warning applies to any Flutter integration.
     implementation "dev.lumora.ble:sdk:0.1.0-alpha01"
     implementation "dev.lumora.ble:standard:0.1.0-alpha01"
     implementation "dev.lumora.ble:oura:0.1.0-alpha01"

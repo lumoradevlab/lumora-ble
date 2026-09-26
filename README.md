@@ -123,6 +123,18 @@ dependencies:
   lumora_ble: ^0.1.0
 ```
 
+The Flutter plugin resolves the Android SDK from Maven like any other
+dependency, so your app keeps its own AGP and Kotlin versions. Do not add a
+composite build for it: `includeBuild` pulls this repository's Gradle build
+into yours, and Gradle refuses two Android Gradle Plugin versions in one
+build — which would pin your app's toolchain to ours. The composite build in
+`flutter/lumora_ble/example` exists only because that app lives inside this
+repository.
+
+Unlike the native integration, the Flutter distribution bundles every
+protocol: a Dart consumer cannot express a per-protocol Gradle dependency, so
+the vendor terms-of-service note above applies to any Flutter integration.
+
 ## Use it
 
 Kotlin:
