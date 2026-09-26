@@ -225,7 +225,10 @@ Android's BLE stack has sharp edges that cause most real-world bugs:
   device sends nothing until the CCCD descriptor is written.
 - **GATT clients leak.** An app gets ~32; connecting per scan result exhausts
   them and yields permanent `status 133`. `GattConnection.close()` is idempotent
-  and runs on every exit path.
+  and runs on every exit path. It is also synchronous and lock-guarded: the
+  `BluetoothGatt` reference is held under a `ReentrantLock` for the whole of
+  each use, so a `close()` arriving on another thread cannot release the client
+  between the operation pump reading the field and calling into it.
 - **Scanning must stop.** Cancelling the scan flow stops the radio.
 
 ## Security
@@ -238,7 +241,7 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 92 tests
+./gradlew test                                    # native, 95 tests
 cd flutter/lumora_ble && flutter test             # Dart, 17 tests
 ./gradlew publishToMavenLocal                     # install locally to try it
 ```

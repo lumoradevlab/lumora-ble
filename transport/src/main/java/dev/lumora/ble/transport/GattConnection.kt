@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /** A characteristic notification: which characteristic, and the bytes it pushed. */
 data class Notification(val characteristic: UUID, val value: ByteArray) {
@@ -51,6 +53,24 @@ class GattConnection(
     private val scope: CoroutineScope,
 ) {
     private val queue = GattQueue()
+
+    /**
+     * Guards [gatt] for the whole of each use, not just the field read.
+     *
+     * [close] can run on any thread — a teardown callback, the binder thread
+     * delivering a disconnect — while the pump coroutine is issuing an
+     * operation. Without holding a lock across read-and-use, close() can null
+     * the reference and call BluetoothGatt.close() between the pump reading
+     * the field and calling into it, so the operation lands on a released
+     * client.
+     *
+     * A ReentrantLock rather than a Mutex: close() is deliberately not a
+     * suspending function (see LumoraBle.close), and a Mutex cannot be taken
+     * from non-suspending code. Every section it guards is a few native calls
+     * with no suspension inside, so it is never held across a suspension
+     * point.
+     */
+    private val gattLock = ReentrantLock()
     private var gatt: BluetoothGatt? = null
     private var pump: Job? = null
     private val closed = AtomicBoolean(false)
@@ -147,14 +167,16 @@ class GattConnection(
 
     /** Connects and waits for service discovery. Throws [DeviceException] on failure. */
     suspend fun connect(device: BluetoothDevice) {
-        check(gatt == null) { "GattConnection is single-use; create a new one per link" }
         connected = CompletableDeferred()
         servicesReady = CompletableDeferred()
 
-        gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            device.connectGatt(context, false, callback)
+        gattLock.withLock {
+            check(gatt == null) { "GattConnection is single-use; create a new one per link" }
+            gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                device.connectGatt(context, false, callback)
+            }
         }
 
         connected!!.await()
@@ -167,18 +189,26 @@ class GattConnection(
         pump = scope.launch {
             while (true) {
                 val op = queue.next()
-                val g = gatt
-                if (g == null) {
-                    queue.fail(DeviceError.GattFailure(0, "no gatt"))
-                    continue
+                // Held across the whole issue, so a concurrent close() cannot
+                // release the client between the read and the native call.
+                // queue.next() suspends outside the lock, as it must.
+                val issued = gattLock.withLock {
+                    val g = gatt ?: return@withLock null
+                    op.execute(g) { uuid -> findCharacteristic(uuid) }
                 }
-                if (!op.execute(g) { uuid -> findCharacteristic(uuid) }) {
-                    queue.fail(DeviceError.GattFailure(0, "could not issue ${op::class.simpleName}"))
+                when (issued) {
+                    null -> queue.fail(DeviceError.GattFailure(0, "no gatt"))
+                    false -> queue.fail(
+                        DeviceError.GattFailure(0, "could not issue ${op::class.simpleName}"))
+                    true -> Unit
                 }
             }
         }
     }
 
+    // Called only from inside gattLock (the pump's issue block), so it does
+    // not take the lock itself — ReentrantLock would permit it, but the
+    // annotation is the documentation.
     private fun findCharacteristic(uuid: UUID): BluetoothGattCharacteristic? =
         gatt?.services?.firstNotNullOfOrNull { it.getCharacteristic(uuid) }
 
@@ -207,7 +237,8 @@ class GattConnection(
         queue.submit(GattOp.Subscribe(characteristic, indication, CompletableDeferred()))
     }
 
-    fun hasService(uuid: UUID): Boolean = gatt?.getService(uuid) != null
+    fun hasService(uuid: UUID): Boolean =
+        gattLock.withLock { gatt?.getService(uuid) != null }
 
     /**
      * Every service UUID the peripheral actually exposes.
@@ -217,7 +248,7 @@ class GattConnection(
      * really found, which is what the protocol layer branches on.
      */
     fun discoveredServices(): List<UUID> =
-        gatt?.services?.map { it.uuid }.orEmpty()
+        gattLock.withLock { gatt?.services?.map { it.uuid }.orEmpty() }
 
     /**
      * Starts Android-level bonding if the device is not already bonded.
@@ -227,7 +258,7 @@ class GattConnection(
      * protocol actually asks for it. Returns true if bonding is done or underway.
      */
     fun bond(): Boolean {
-        val device = gatt?.device ?: return false
+        val device = gattLock.withLock { gatt?.device } ?: return false
         return when (device.bondState) {
             BluetoothDevice.BOND_BONDED -> true
             BluetoothDevice.BOND_BONDING -> true
@@ -238,10 +269,15 @@ class GattConnection(
     /** Idempotent. Safe to call from any thread and from the disconnect callback. */
     fun close() {
         if (!closed.compareAndSet(false, true)) return
+        // Cancel the pump first so it stops taking new operations, then take
+        // the lock: if it is mid-issue we wait for that native call to return
+        // rather than releasing the client underneath it.
         pump?.cancel()
         queue.cancelAll(DeviceError.GattFailure(0, "connection closed"))
-        gatt?.disconnect()
-        gatt?.close()
-        gatt = null
+        gattLock.withLock {
+            gatt?.disconnect()
+            gatt?.close()
+            gatt = null
+        }
     }
 }
