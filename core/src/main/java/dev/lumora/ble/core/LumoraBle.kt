@@ -13,10 +13,32 @@ import java.time.Instant
  *
  * Usage:
  * ```
- * val sdk = LumoraBle.create(context)
- * sdk.scan(DeviceKind.OURA_RING).collect { found -> sdk.connect(found) }
+ * val sdk = LumoraBle.create(context) { install(StandardGattProtocol) }
+ * sdk.scan(DeviceKind.HEART_RATE_MONITOR).collect { found -> sdk.connect(found) }
  * sdk.readings.collect { reading -> ... }
  * ```
+ *
+ * An instance owns a coroutine scope and GATT clients, so it must be closed.
+ * For a long-lived one, tie [close] to the owning component's teardown. For a
+ * one-off task, this being [java.io.Closeable] means the standard `use` works
+ * and runs teardown even if the block throws:
+ *
+ * ```
+ * val history = LumoraBle.create(context) { install(StandardGattProtocol) }
+ *     .use { sdk ->
+ *         sdk.connect(device)
+ *         sdk.backfill(device.id, since)
+ *     }
+ * ```
+ *
+ * `use` suits a task that awaits its own work. It closes when the block
+ * returns, so anything the block merely *launched* is still pending at that
+ * point — collect a stream inside the block, or keep the instance alive and
+ * close it later.
+ *
+ * Leaking an instance is not a mere memory cost: Android caps an app at
+ * roughly 32 GATT client interfaces, and exhausting them yields permanent
+ * `status 133` failures until the process restarts.
  */
 interface LumoraBle : java.io.Closeable {
 

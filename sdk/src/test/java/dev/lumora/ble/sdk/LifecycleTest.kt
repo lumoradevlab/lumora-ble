@@ -98,6 +98,45 @@ class LifecycleTest {
     }
 
     @Test
+    fun `use closes the SDK even when the block throws`() = runTest {
+        val connection = CountingConnection(DeviceKind.HEART_RATE_MONITOR)
+        val sdk = harness(connection)
+
+        // kotlin.io.use works because LumoraBle is Closeable — no extension
+        // of our own is needed, and writing one would shadow the stdlib's
+        // try/finally semantics for no gain.
+        val error = runCatching {
+            sdk.use {
+                it.connect(device)
+                advanceUntilIdle()
+                error("one-off task failed")
+            }
+        }.exceptionOrNull()
+
+        assertEquals("one-off task failed", error?.message)
+        // The point of the idiom: teardown happened despite the throw, so a
+        // failed one-off task cannot leak a GATT client.
+        assertTrue("use must close on the exception path", connection.released)
+    }
+
+    @Test
+    fun `use closes before a launched job inside it has run`() = runTest {
+        val connection = CountingConnection(DeviceKind.HEART_RATE_MONITOR)
+        val sdk = harness(connection)
+
+        // The trap `use` sets with coroutines: the block returns as soon as
+        // it launches, so close() runs while the launched work is still
+        // pending. Documented rather than guarded against — `use` suits a
+        // one-off task that awaits its own work, not fire-and-forget.
+        sdk.use {
+            it.connect(device)
+            // deliberately not awaited
+        }
+
+        assertTrue("close ran at the end of the block", connection.released)
+    }
+
+    @Test
     fun `close releases synchronously, before any coroutine runs`() = runTest {
         val connection = CountingConnection(DeviceKind.HEART_RATE_MONITOR)
         val sdk = harness(connection)

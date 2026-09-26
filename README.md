@@ -167,6 +167,17 @@ into a coroutine races the scope's own cancellation, and a lost race leaks a
 GATT client interface — Android caps an app at roughly 32, and a leaked one
 stays leaked until the process restarts.
 
+For a one-off task, `Closeable` means the standard `use` applies, and it
+closes even if the block throws:
+
+```kotlin
+val history = LumoraBle.create(context) { install(StandardGattProtocol) }
+    .use { sdk ->
+        sdk.connect(device)
+        sdk.backfill(device.id, since)
+    }
+```
+
 **Flutter**
 
 ```yaml
@@ -297,7 +308,7 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 95 tests
+./gradlew test                                    # native, 97 tests
 cd flutter/lumora_ble && flutter test             # Dart, 17 tests
 ./gradlew publishToMavenLocal                     # install locally to try it
 ```
