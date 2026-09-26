@@ -2,6 +2,7 @@ package dev.lumora.ble.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,23 @@ class ProtocolRegistryTest {
             listOf(DeviceKind.HEART_RATE_MONITOR, DeviceKind.OURA_RING),
             registry.installed.toList(),
         )
+    }
+
+    @Test
+    fun `the registry holds only what was installed, by identity`() {
+        // The legal boundary rests on this: a consumer who installs one
+        // protocol must not find another reachable through the SDK. Verified
+        // empirically too — a release APK installing only the standard
+        // profile contains no dev/lumora/ble/{dexcom,oura,libre} classes at
+        // all, so the vendor code is absent rather than merely unreachable.
+        val standard = protocol(DeviceKind.HEART_RATE_MONITOR)
+        val registry = ProtocolRegistry()
+        registry.install(standard)
+
+        assertSame(standard, registry[DeviceKind.HEART_RATE_MONITOR])
+        DeviceKind.entries
+            .filter { it != DeviceKind.HEART_RATE_MONITOR }
+            .forEach { assertNull("$it must not be reachable", registry[it]) }
     }
 
     @Test

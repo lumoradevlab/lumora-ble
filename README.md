@@ -99,7 +99,13 @@ dependencies {
 
 This is a legal boundary as much as a packaging one. Bundling every protocol
 would impose Dexcom's, Ōura's and Abbott's terms on an app that only wanted a
-standard heart rate strap, so `:sdk` depends on no device module at all.
+standard heart rate strap, so `:sdk` depends on no device module on any
+configuration.
+
+The uninstalled protocols are **absent, not merely unreachable**. A release
+APK built against only `:standard` contains no `dev/lumora/ble/dexcom`,
+`oura` or `libre` classes at all — verified by dumping the DEX — so the
+opt-in saves code size as well as legal exposure.
 
 The SDK owns a coroutine scope, so scope it to something and close it:
 
