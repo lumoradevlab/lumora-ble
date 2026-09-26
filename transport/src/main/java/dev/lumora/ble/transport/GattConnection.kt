@@ -201,6 +201,16 @@ class GattConnection(
     fun hasService(uuid: UUID): Boolean = gatt?.getService(uuid) != null
 
     /**
+     * Every service UUID the peripheral actually exposes.
+     *
+     * A device can advertise a service UUID it does not serve — advertisement
+     * data and the GATT table are independent — so this reports what discovery
+     * really found, which is what the protocol layer branches on.
+     */
+    fun discoveredServices(): List<UUID> =
+        gatt?.services?.map { it.uuid }.orEmpty()
+
+    /**
      * Starts Android-level bonding if the device is not already bonded.
      *
      * Some peripherals (the Dexcom G6 among them) refuse to serve data until

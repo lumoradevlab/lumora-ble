@@ -60,6 +60,10 @@ class StandardGattConnection(
             gatt.connect(device.bluetoothDevice())
 
             // No auth step: the link is usable the moment services resolve.
+            // Log the real GATT table: a peripheral can advertise a service it
+            // does not serve, and without this an empty profile set is
+            // indistinguishable from a discovery failure.
+            Timber.i("discovered services: %s", gatt.discoveredServices())
             val profiles = mutableSetOf<UUIDProfile>()
 
             if (gatt.hasService(StandardGattProfiles.HEART_RATE_SERVICE)) {
