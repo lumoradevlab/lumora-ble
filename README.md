@@ -82,9 +82,24 @@ exception: it implements published SIG profiles and carries none of that risk.
 
 ```kotlin
 dependencies {
-    implementation("dev.lumora.ble:sdk:0.1.0")
+    implementation("dev.lumora.ble:sdk:0.1.0-alpha01")
 }
 ```
+
+The SDK owns a coroutine scope, so scope it to something and close it:
+
+```kotlin
+class HealthViewModel(app: Application) : AndroidViewModel(app) {
+    private val sdk = LumoraBle.create(app)
+
+    override fun onCleared() {
+        viewModelScope.launch { sdk.close() }
+    }
+}
+```
+
+Without `close()` the SDK's collectors outlive the component that created
+them.
 
 **Flutter**
 
@@ -187,8 +202,9 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 84 tests
+./gradlew test                                    # native, 87 tests
 cd flutter/lumora_ble && flutter test             # Dart, 17 tests
+./gradlew publishToMavenLocal                     # install locally to try it
 ```
 
 ### On-device harnesses

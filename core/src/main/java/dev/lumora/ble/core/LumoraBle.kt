@@ -1,6 +1,7 @@
 package dev.lumora.ble.core
 
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
 
 /**
  * The single entry point third-party apps integrate against.
@@ -37,8 +38,35 @@ interface LumoraBle {
 
     suspend fun disconnectAll()
 
-    /** Pulls stored history from one device. */
-    suspend fun backfill(id: DeviceId, sinceEpochMillis: Long): List<DeviceReading>
+    /**
+     * Pulls stored history from one device.
+     *
+     * Returns an empty list for devices that keep no history — the standard
+     * GATT profiles define none — rather than throwing, so a caller can poll
+     * every connected device uniformly.
+     */
+    suspend fun backfill(id: DeviceId, since: Instant): List<DeviceReading>
+
+    /**
+     * Reads a FreeStyle Libre 1/2 sensor from an NFC tag.
+     *
+     * Libre is the one supported device that is not reached over BLE, so it
+     * does not appear in [scan] or [connect]: the user taps the phone against
+     * the sensor and the whole reading history transfers in one pass. Pass the
+     * `android.nfc.Tag` delivered by your NFC intent or reader-mode callback.
+     *
+     * Emits the decoded readings on [readings] as well as returning them, so a
+     * consumer observing one merged stream sees Libre data alongside everything
+     * else rather than having to special-case it.
+     *
+     * [tag] is typed loosely because this interface stays free of Android
+     * framework types; anything other than an `android.nfc.Tag` is rejected
+     * with [DeviceError.ProtocolViolation].
+     *
+     * @throws DeviceException if the tag is not a Libre sensor or the read
+     *   fails part-way — a partial NFC transfer is never returned as data.
+     */
+    suspend fun readLibreTag(tag: Any): List<DeviceReading>
 
     /**
      * Supplies the Dexcom transmitter serial (6 characters, printed on the
@@ -46,8 +74,12 @@ interface LumoraBle {
      *
      * The serial IS the credential for a G6 — the encryption key is derived from
      * it — so this must be set before connecting to a Dexcom sensor.
+     *
+     * @throws DeviceException if [serial] is not 6 alphanumeric characters.
+     *   Validating here rather than at connect time surfaces a typo while the
+     *   user is still looking at the applicator.
      */
-    fun setDexcomTransmitter(serial: String, sessionStart: java.time.Instant)
+    fun setDexcomTransmitter(serial: String, sessionStart: Instant)
 
     /**
      * True if every runtime permission BLE needs is granted.
@@ -56,6 +88,18 @@ interface LumoraBle {
      * (or the Flutter plugin's activity binding) must request them.
      */
     fun requestPermissions(): Boolean
+
+    /**
+     * Disconnects everything and releases the SDK's internal coroutine scope.
+     *
+     * An instance is unusable afterwards; create a new one to reconnect. Call
+     * this when the owning component goes away — an SDK instance scoped to an
+     * Activity or ViewModel and never closed keeps its collectors alive for the
+     * life of the process.
+     *
+     * Idempotent.
+     */
+    suspend fun close()
 
     companion object
 }

@@ -2,10 +2,12 @@ package dev.lumora.ble.sdk
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.nfc.Tag
 import dev.lumora.ble.core.*
 import dev.lumora.ble.dexcom.DexcomAuth
 import dev.lumora.ble.dexcom.DexcomConnection
 import dev.lumora.ble.dexcom.DexcomProtocol
+import dev.lumora.ble.libre.LibreNfcReader
 import dev.lumora.ble.oura.OuraConnection
 import dev.lumora.ble.oura.OuraProtocol
 import dev.lumora.ble.standard.StandardGattConnection
@@ -14,7 +16,9 @@ import dev.lumora.ble.transport.BlePermissions
 import dev.lumora.ble.transport.BleScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -22,6 +26,7 @@ import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Default [LumoraBle] implementation.
@@ -41,7 +46,17 @@ internal class LumoraBleImpl(
 
     private val scanner = BleScanner(context)
     private val active = ConcurrentHashMap<DeviceId, DeviceConnection>()
+
+    /**
+     * The collectors mirroring each connection into the merged streams.
+     *
+     * Held so [disconnect] can cancel them. Without this they accumulate in
+     * [scope] for the life of the process — a reconnect loop would leak two
+     * coroutines per cycle.
+     */
+    private val mirrors = ConcurrentHashMap<DeviceId, List<Job>>()
     private val connectLock = Mutex()
+    private val closed = AtomicBoolean(false)
 
     private val _connections = MutableStateFlow<Map<DeviceId, ConnectionState>>(emptyMap())
     override val connections: Flow<Map<DeviceId, ConnectionState>> = _connections.asStateFlow()
@@ -121,18 +136,22 @@ internal class LumoraBleImpl(
         val connection = create(device.id.kind)
         active[device.id] = connection
 
-        // Mirror this connection's state and readings into the merged streams.
-        connection.state
-            .onEach { st -> _connections.update { it + (device.id to st) } }
-            .launchIn(scope)
-        connection.readings
-            .onEach { _readings.emit(it) }
-            .launchIn(scope)
+        // Mirror this connection's state and readings into the merged streams,
+        // keeping the jobs so disconnect() can stop them.
+        mirrors[device.id] = listOf(
+            connection.state
+                .onEach { st -> _connections.update { it + (device.id to st) } }
+                .launchIn(scope),
+            connection.readings
+                .onEach { _readings.emit(it) }
+                .launchIn(scope),
+        )
 
         try {
             connection.connect(device)
         } catch (e: Throwable) {
             active.remove(device.id)
+            mirrors.remove(device.id)?.forEach { it.cancel() }
             throw e
         }
     }
@@ -178,6 +197,9 @@ internal class LumoraBleImpl(
 
     override suspend fun disconnect(id: DeviceId) {
         active.remove(id)?.disconnect()
+        // Cancel after disconnecting, so the final Disconnected state is still
+        // mirrored to observers before the collector stops.
+        mirrors.remove(id)?.forEach { it.cancel() }
         _connections.update { it - id }
     }
 
@@ -185,10 +207,41 @@ internal class LumoraBleImpl(
         active.keys.toList().forEach { runCatching { disconnect(it) } }
     }
 
-    override suspend fun backfill(id: DeviceId, sinceEpochMillis: Long): List<DeviceReading> {
+    override suspend fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        disconnectAll()
+        // Cancels every collector and any in-flight connection work. The
+        // instance is unusable afterwards, which the interface documents.
+        scope.cancel()
+    }
+
+    override suspend fun backfill(id: DeviceId, since: Instant): List<DeviceReading> {
         val connection = active[id]
             ?: throw DeviceException(DeviceError.GattFailure(0, "device not connected"))
-        return connection.backfill(Instant.ofEpochMilli(sinceEpochMillis))
+        return connection.backfill(since)
+    }
+
+    /**
+     * Reads a Libre sensor over NFC and republishes the result on [readings].
+     *
+     * Libre never appears in [scan] or [connect], so without this the one
+     * merged stream the SDK promises would silently exclude a supported
+     * device and consumers would have to special-case it.
+     */
+    override suspend fun readLibreTag(tag: Any): List<DeviceReading> {
+        val nfcTag = tag as? Tag ?: throw DeviceException(DeviceError.ProtocolViolation(
+            "readLibreTag expects an android.nfc.Tag, got ${tag::class.java.name}"))
+
+        val result = LibreNfcReader().read(nfcTag)
+        if (result.isExpired) {
+            throw DeviceException(DeviceError.ProtocolViolation(
+                "Libre sensor is expired (age ${result.sensorAgeMinutes / 60}h); " +
+                    "its readings are no longer trustworthy"))
+        }
+
+        val readings = (result.trend + result.history).map { DeviceReading.Glucose(it) }
+        readings.forEach { _readings.emit(it) }
+        return readings
     }
 }
 

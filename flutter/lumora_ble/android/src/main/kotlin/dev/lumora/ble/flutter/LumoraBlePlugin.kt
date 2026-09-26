@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.Instant
 
@@ -64,7 +65,11 @@ class LumoraBlePlugin : FlutterPlugin {
         readingEvents.setStreamHandler(null)
         connectionEvents.setStreamHandler(null)
         scanEvents.setStreamHandler(null)
-        scope.launch { sdk.disconnectAll() }
+        // runBlocking, not scope.launch: cancelling the scope on the next line
+        // would race the coroutine and could abandon live GATT connections,
+        // leaking client interfaces for the life of the process. Teardown is
+        // brief and this is already the engine-detach path.
+        runBlocking { runCatching { sdk.close() } }
         scope.cancel()
     }
 
@@ -109,7 +114,8 @@ class LumoraBlePlugin : FlutterPlugin {
                     }
 
                     "backfill" -> {
-                        val since = call.argument<Number>("since")!!.toLong()
+                        val since = Instant.ofEpochMilli(
+                            call.argument<Number>("since")!!.toLong())
                         sdk.backfill(call.deviceId(), since).map { it.toMap() }
                     }
 
