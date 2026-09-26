@@ -2,8 +2,8 @@ package dev.lumora.ble.standard
 
 import dev.lumora.ble.core.BatteryLevel
 import dev.lumora.ble.core.HeartRateSample
-import dev.lumora.ble.transport.u16le
-import dev.lumora.ble.transport.u8
+import dev.lumora.ble.core.u16le
+import dev.lumora.ble.core.u8
 import java.time.Instant
 
 /**

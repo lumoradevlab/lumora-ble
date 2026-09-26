@@ -1,6 +1,12 @@
-package dev.lumora.ble.transport
+package dev.lumora.ble.core
 
-/** Little-endian accessors — all three protocols encode multi-byte ints LE. */
+/**
+ * Little-endian accessors — every protocol here encodes multi-byte ints LE.
+ *
+ * In `core` rather than `transport` because they are pure Kotlin with no
+ * Android dependency, and the protocol parsers that use them are too. Keeping
+ * them out of the Android layer is what lets those parsers stay JVM-testable.
+ */
 fun ByteArray.u8(i: Int): Int = this[i].toInt() and 0xFF
 fun ByteArray.u16le(i: Int): Int = u8(i) or (u8(i + 1) shl 8)
 fun ByteArray.u32le(i: Int): Long =

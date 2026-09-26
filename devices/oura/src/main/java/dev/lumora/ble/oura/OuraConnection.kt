@@ -6,7 +6,7 @@ import android.content.Context
 import dev.lumora.ble.core.*
 import dev.lumora.ble.transport.GattConnection
 import dev.lumora.ble.transport.Notification
-import dev.lumora.ble.transport.u8
+import dev.lumora.ble.core.u8
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch

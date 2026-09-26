@@ -242,7 +242,8 @@ try {
 ## Layout
 
 ```
-core/         Domain model + the LumoraBle interface. No Android BLE types.
+core/         Domain model, the LumoraBle contract, byte helpers.
+              A pure JVM module — no Android dependency at all.
 transport/    GATT plumbing: serialized op queue, scanner, permissions.
 devices/
   oura/       Nonce/AES-ECB auth, commands, event parsing.
@@ -256,8 +257,19 @@ flutter/      Flutter plugin + example app.
 testapp/      Native Android harness for the standard GATT path.
 ```
 
-`core` deliberately has no Android Bluetooth imports, so the domain types and the
-`LumoraBle` contract stay unit-testable on the JVM.
+`core` is a **pure JVM module**, not an Android library — its published
+artifact is a jar depending on nothing but the Kotlin stdlib and coroutines.
+That is enforced by the build rather than by discipline: an Android import in
+`core` fails to compile.
+
+Two things follow. Its tests run as plain JUnit with no AGP, no `compileSdk`,
+and no debug/release variant duplication. And it is the natural seam for
+Kotlin Multiplatform later: the domain types and the protocol parsers that
+depend only on them — `StandardGattParsers` reaches for nothing but
+`HeartRateSample`, `BatteryLevel` and the byte helpers — could be shared with
+a native iOS transport without touching the parsing logic. The byte helpers
+live in `core` for exactly this reason, rather than in `transport` where the
+Android types are.
 
 ### Why the transport layer looks the way it does
 

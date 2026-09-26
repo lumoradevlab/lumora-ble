@@ -3,7 +3,7 @@ package dev.lumora.ble.libre
 import dev.lumora.ble.core.DeviceKind
 import dev.lumora.ble.core.GlucoseReading
 import dev.lumora.ble.core.GlucoseTrend
-import dev.lumora.ble.transport.u8
+import dev.lumora.ble.core.u8
 import java.time.Instant
 
 /**

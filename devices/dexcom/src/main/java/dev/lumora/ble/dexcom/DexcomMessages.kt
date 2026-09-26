@@ -3,10 +3,10 @@ package dev.lumora.ble.dexcom
 import dev.lumora.ble.core.DeviceKind
 import dev.lumora.ble.core.GlucoseReading
 import dev.lumora.ble.core.GlucoseTrend
-import dev.lumora.ble.transport.i16le
-import dev.lumora.ble.transport.u16le
-import dev.lumora.ble.transport.u32le
-import dev.lumora.ble.transport.u8
+import dev.lumora.ble.core.i16le
+import dev.lumora.ble.core.u16le
+import dev.lumora.ble.core.u32le
+import dev.lumora.ble.core.u8
 import java.time.Instant
 
 /** Transmitter response to `01` — our echoed token plus its own challenge. */
