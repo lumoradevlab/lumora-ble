@@ -1,9 +1,16 @@
 name: lumora_ble
 description: >-
-  One SDK for connecting to Oura Ring, FreeStyle Libre and Dexcom sensors over
-  BLE, so apps do not integrate each device separately.
-version: 0.1.0
+  One API for health wearables. Android reads Oura, Dexcom G6, FreeStyle Libre
+  and standard BLE heart rate; iOS reads Apple Watch data from HealthKit. The
+  platforms support different devices — check supportedDevices() at runtime.
+version: 0.1.0-alpha.1
 repository: https://github.com/lumoradevlab/BLE-Android
+issue_tracker: https://github.com/lumoradevlab/BLE-Android/issues
+topics:
+  - bluetooth
+  - healthkit
+  - wearables
+  - ble
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
