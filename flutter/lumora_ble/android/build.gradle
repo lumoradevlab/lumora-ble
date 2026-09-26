@@ -36,6 +36,12 @@ dependencies {
     // Gradle modules via includeBuild — see example/android/settings.gradle.kts.
     // Substitution rather than a project(":sdk") path keeps this file correct
     // for consumers who resolve the published artifact.
-    implementation "dev.lumora.ble:sdk:0.1.0"
+    // The Flutter distribution bundles every protocol: a Dart consumer cannot
+    // express a per-protocol Gradle dependency the way a native one can.
+    implementation "dev.lumora.ble:sdk:0.1.0-alpha01"
+    implementation "dev.lumora.ble:standard:0.1.0-alpha01"
+    implementation "dev.lumora.ble:oura:0.1.0-alpha01"
+    implementation "dev.lumora.ble:libre:0.1.0-alpha01"
+    implementation "dev.lumora.ble:dexcom:0.1.0-alpha01"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
 }

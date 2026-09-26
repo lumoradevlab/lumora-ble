@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.lumora.ble.core.*
 import dev.lumora.ble.sdk.create
+import dev.lumora.ble.standard.StandardGattProtocol
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -20,7 +21,11 @@ import java.time.format.DateTimeFormatter
  */
 class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val sdk = LumoraBle.create(app)
+    // This harness exercises the standard SIG profile only, so it installs
+    // only that protocol — and therefore ships none of the vendor code.
+    private val sdk = LumoraBle.create(app) {
+        install(StandardGattProtocol)
+    }
 
     private val _devices = MutableStateFlow<List<DiscoveredDevice>>(emptyList())
     val devices: StateFlow<List<DiscoveredDevice>> = _devices.asStateFlow()

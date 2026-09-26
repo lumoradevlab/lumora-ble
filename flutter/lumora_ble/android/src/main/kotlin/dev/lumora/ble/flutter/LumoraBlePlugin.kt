@@ -3,7 +3,11 @@ package dev.lumora.ble.flutter
 import dev.lumora.ble.core.*
 // LumoraBle.create is an extension on the companion, declared in the sdk
 // module rather than core, so the wildcard import above does not cover it.
+import dev.lumora.ble.dexcom.DexcomProtocolFactory
+import dev.lumora.ble.libre.LibreProtocol
+import dev.lumora.ble.oura.OuraRingProtocol
 import dev.lumora.ble.sdk.create
+import dev.lumora.ble.standard.StandardGattProtocol
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -39,9 +43,19 @@ class LumoraBlePlugin : FlutterPlugin {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var sdk: LumoraBle
+    private lateinit var appContext: android.content.Context
+
+    /** Set once the Dart side supplies a transmitter serial. */
+    private var dexcomFactory: DexcomProtocolFactory? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        sdk = LumoraBle.create(binding.applicationContext)
+        // The plugin installs every protocol: a Dart consumer cannot express
+        // a Gradle dependency, so the Flutter distribution is necessarily the
+        // bundled one. Native consumers choose per-protocol instead — see
+        // LumoraBleFactory. This is why the Flutter plugin's own README must
+        // carry the vendor terms-of-service warning.
+        appContext = binding.applicationContext
+        sdk = buildSdk()
 
         methods = MethodChannel(binding.binaryMessenger, "dev.lumora.ble/methods")
         methods.setMethodCallHandler(::onMethodCall)
@@ -58,6 +72,22 @@ class LumoraBlePlugin : FlutterPlugin {
 
         scanEvents = EventChannel(binding.binaryMessenger, "dev.lumora.ble/scan")
         scanEvents.setStreamHandler(ScanStreamHandler(scope, sdk))
+    }
+
+    private fun buildSdk(): LumoraBle = LumoraBle.create(appContext) {
+        install(StandardGattProtocol)
+        install(OuraRingProtocol)
+        install(LibreProtocol)
+        // Only installable once the Dart side supplies a transmitter serial:
+        // a G6's key is derived from it, so there is nothing to build without.
+        dexcomFactory?.let { install(it) }
+    }
+
+    /** Rebuilds with the current protocol set, releasing the previous instance. */
+    private fun rebuildSdk() {
+        val previous = sdk
+        sdk = buildSdk()
+        scope.launch { runCatching { previous.close() } }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -81,11 +111,16 @@ class LumoraBlePlugin : FlutterPlugin {
 
                     "requestPermissions" -> sdk.requestPermissions()
 
+                    // A G6's key derives from the serial, so the protocol
+                    // cannot be built until the serial is known. Recreating
+                    // the SDK is the honest way to express that through a
+                    // channel API that has no builder.
                     "setDexcomTransmitter" -> {
-                        sdk.setDexcomTransmitter(
+                        dexcomFactory = DexcomProtocolFactory(
                             call.argument<String>("serial")!!,
                             Instant.ofEpochMilli(call.argument<Number>("sessionStart")!!.toLong()),
                         )
+                        rebuildSdk()
                         null
                     }
 

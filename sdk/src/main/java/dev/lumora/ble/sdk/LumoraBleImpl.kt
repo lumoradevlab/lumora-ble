@@ -2,16 +2,7 @@ package dev.lumora.ble.sdk
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.nfc.Tag
 import dev.lumora.ble.core.*
-import dev.lumora.ble.dexcom.DexcomAuth
-import dev.lumora.ble.dexcom.DexcomConnection
-import dev.lumora.ble.dexcom.DexcomProtocol
-import dev.lumora.ble.libre.LibreNfcReader
-import dev.lumora.ble.oura.OuraConnection
-import dev.lumora.ble.oura.OuraProtocol
-import dev.lumora.ble.standard.StandardGattConnection
-import dev.lumora.ble.standard.StandardGattProfiles
 import dev.lumora.ble.transport.BlePermissions
 import dev.lumora.ble.transport.BleScanner
 import kotlinx.coroutines.CoroutineScope
@@ -20,10 +11,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import timber.log.Timber
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,8 +21,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Default [LumoraBle] implementation.
  *
  * Owns one [DeviceConnection] per connected device and merges their readings
- * into a single stream. Connections are created lazily per device kind, so a
- * consumer that only uses Oura never touches the CGM code paths.
+ * into a single stream.
+ *
+ * Note what this class does *not* import: no device module appears here. Every
+ * protocol arrives through the [ProtocolRegistry] the consumer builds, so a
+ * build that installs only standard SIG heart rate never links the vendor code
+ * — which is what keeps those vendors' terms of service out of an app that
+ * did not opt in.
  */
 // Permissions are verified in scan()/connect() via BlePermissions before any
 // BluetoothDevice member is touched; lint cannot see across that check.
@@ -41,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class LumoraBleImpl(
     private val context: Context,
     private val credentials: CredentialStore,
+    private val registry: ProtocolRegistry,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : LumoraBle {
 
@@ -58,13 +53,27 @@ internal class LumoraBleImpl(
     private val connectLock = Mutex()
     private val closed = AtomicBoolean(false)
 
+    /** Handed to each protocol so it can build a connection. */
+    private val protocolContext = object : ProtocolContext {
+        override val androidContext: Any get() = this@LumoraBleImpl.context
+        override val scope: CoroutineScope get() = this@LumoraBleImpl.scope
+        override val credentials: CredentialStore get() = this@LumoraBleImpl.credentials
+    }
+
     private val _connections = MutableStateFlow<Map<DeviceId, ConnectionState>>(emptyMap())
     override val connections: Flow<Map<DeviceId, ConnectionState>> = _connections.asStateFlow()
 
     private val _readings = MutableSharedFlow<DeviceReading>(extraBufferCapacity = 256)
     override val readings: Flow<DeviceReading> = _readings.asSharedFlow()
 
-    override val supportedDevices: List<DeviceSupport> = SupportMatrix.all
+    /**
+     * Only the kinds this build installed a protocol for.
+     *
+     * Reporting the full matrix would advertise devices whose code is not in
+     * the APK, which is exactly the confusion opt-in protocols exist to avoid.
+     */
+    override val supportedDevices: List<DeviceSupport> =
+        SupportMatrix.all.filter { it.kind in registry.installed }
 
     override fun requestPermissions(): Boolean = BlePermissions.allGranted(context)
 
@@ -76,41 +85,23 @@ internal class LumoraBleImpl(
             }
         }
 
-        // Libre 1/2 are NFC devices and never appear in a BLE scan.
-        if (kind == DeviceKind.LIBRE_SENSOR) {
+        val protocol = registry[kind] ?: return flow { throw notInstalled(kind) }
+
+        // A protocol contributing no scan services is not discovered by
+        // scanning — Libre is tapped over NFC. Failing loudly beats an empty
+        // stream, which looks like a hardware fault.
+        if (protocol.scanServices.isEmpty()) {
             return flow {
                 throw DeviceException(DeviceError.ProtocolViolation(
-                    "Libre sensors are read over NFC, not BLE. Use LibreNfcReader.read(tag)."))
+                    "$kind is not discovered by scanning. " + if (kind == DeviceKind.LIBRE_SENSOR) {
+                        "Libre sensors are read over NFC: call readLibreTag(tag)."
+                    } else {
+                        "See supportedDevices() for how it is reached."
+                    }))
             }
         }
 
-        // Scanning for a blocked kind would return results we cannot connect
-        // to; fail with the reason instead of letting the user pick one.
-        val support = SupportMatrix.forKind(kind)
-        if (support.status == SupportStatus.BLOCKED) {
-            return flow {
-                throw DeviceException(DeviceError.PairingRequired(
-                    support.limitation ?: "device not supported over BLE"))
-            }
-        }
-
-        val services = when (kind) {
-            DeviceKind.OURA_RING -> listOf(OuraProtocol.SERVICE)
-            DeviceKind.DEXCOM_SENSOR -> listOf(DexcomProtocol.SERVICE)
-            DeviceKind.HEART_RATE_MONITOR -> StandardGattProfiles.SCANNABLE_SERVICES
-            // Unreachable: guarded above.
-            DeviceKind.LIBRE_SENSOR, DeviceKind.FITBIT_TRACKER,
-            DeviceKind.PIXEL_WATCH, DeviceKind.APPLE_WATCH -> emptyList()
-        }
-        // A G6 advertises as "Dexcom" + the last two serial characters, so a
-        // configured serial narrows the scan to that one transmitter.
-        val namePrefix = when (kind) {
-            DeviceKind.DEXCOM_SENSOR ->
-                dexcomConfig?.serial?.let { DexcomProtocol.advertisedName(it) } ?: "Dexcom"
-            else -> null
-        }
-
-        return scanner.scan(services, namePrefix)
+        return scanner.scan(protocol.scanServices, protocol.scanNamePrefix())
             .map { result ->
                 DiscoveredDevice(
                     id = DeviceId(result.device.address, kind),
@@ -156,44 +147,39 @@ internal class LumoraBleImpl(
         }
     }
 
-    private fun create(kind: DeviceKind): DeviceConnection = when (kind) {
-        DeviceKind.OURA_RING -> OuraConnection(context, scope, credentials)
-
-        DeviceKind.DEXCOM_SENSOR -> {
-            val config = dexcomConfig ?: throw DeviceException(DeviceError.PairingRequired(
-                "Dexcom needs the transmitter serial. Call setDexcomTransmitter(serial, " +
-                    "sessionStart) before connecting."))
-            DexcomConnection(context, scope, config.serial, config.sessionStart)
-        }
-
-        // No credential, no handshake — the profiles are published, so this
-        // one implementation serves every conforming peripheral.
-        DeviceKind.HEART_RATE_MONITOR -> StandardGattConnection(context, scope)
-
-        // Libre 1/2 are NFC, not BLE — read them with LibreNfcReader instead.
-        DeviceKind.LIBRE_SENSOR -> throw DeviceException(DeviceError.ProtocolViolation(
-            "Libre sensors are read over NFC, not BLE. Use LibreNfcReader.read(tag)."))
-
-        // Blocked kinds are rejected in connect() before reaching here; this
-        // branch keeps the `when` exhaustive if that guard is ever moved.
-        DeviceKind.FITBIT_TRACKER, DeviceKind.PIXEL_WATCH, DeviceKind.APPLE_WATCH ->
-            throw DeviceException(DeviceError.PairingRequired(
-                SupportMatrix.forKind(kind).limitation ?: "device not supported"))
-    }
+    private fun create(kind: DeviceKind): DeviceConnection =
+        (registry[kind] ?: throw notInstalled(kind)).create(protocolContext)
 
     /**
-     * Supplies the Dexcom transmitter serial and current session start.
+     * The error for a kind whose module was not installed.
      *
-     * The serial is the credential — there is nothing to provision on the
-     * transmitter, but without it the key cannot be derived.
+     * Lists what *is* installed, because the fix is a build-file change and a
+     * consumer has no other way to see what this build can reach.
      */
-    override fun setDexcomTransmitter(serial: String, sessionStart: Instant) {
-        dexcomConfig = DexcomConfig(DexcomAuth.validateSerial(serial), sessionStart)
+    private fun notInstalled(kind: DeviceKind) = DeviceException(
+        DeviceError.PairingRequired(
+            "No protocol installed for $kind. Add its module to your build and " +
+                "install it in LumoraBle.create(context) { install(...) }. " +
+                "Installed: ${registry.installed.joinToString().ifEmpty { "none" }}"))
+
+    /**
+     * Reads a Libre sensor over NFC and republishes the result on [readings].
+     *
+     * Libre never appears in [scan] or [connect], so without this the single
+     * merged stream the SDK promises would silently exclude a supported device.
+     */
+    override suspend fun readLibreTag(tag: Any): List<DeviceReading> {
+        val protocol = registry[DeviceKind.LIBRE_SENSOR]
+            ?: throw notInstalled(DeviceKind.LIBRE_SENSOR)
+
+        val reader = protocol as? NfcTagReader ?: throw DeviceException(
+            DeviceError.ProtocolViolation(
+                "installed Libre protocol does not support tag reading"))
+
+        val readings = reader.readTag(tag)
+        readings.forEach { _readings.emit(it) }
+        return readings
     }
-
-    private data class DexcomConfig(val serial: String, val sessionStart: Instant)
-
-    private var dexcomConfig: DexcomConfig? = null
 
     override suspend fun disconnect(id: DeviceId) {
         active.remove(id)?.disconnect()
@@ -220,39 +206,4 @@ internal class LumoraBleImpl(
             ?: throw DeviceException(DeviceError.GattFailure(0, "device not connected"))
         return connection.backfill(since)
     }
-
-    /**
-     * Reads a Libre sensor over NFC and republishes the result on [readings].
-     *
-     * Libre never appears in [scan] or [connect], so without this the one
-     * merged stream the SDK promises would silently exclude a supported
-     * device and consumers would have to special-case it.
-     */
-    override suspend fun readLibreTag(tag: Any): List<DeviceReading> {
-        val nfcTag = tag as? Tag ?: throw DeviceException(DeviceError.ProtocolViolation(
-            "readLibreTag expects an android.nfc.Tag, got ${tag::class.java.name}"))
-
-        val result = LibreNfcReader().read(nfcTag)
-        if (result.isExpired) {
-            throw DeviceException(DeviceError.ProtocolViolation(
-                "Libre sensor is expired (age ${result.sensorAgeMinutes / 60}h); " +
-                    "its readings are no longer trustworthy"))
-        }
-
-        val readings = (result.trend + result.history).map { DeviceReading.Glucose(it) }
-        readings.forEach { _readings.emit(it) }
-        return readings
-    }
 }
-
-/**
- * Creates an SDK instance.
- *
- * [credentials] defaults to an encrypted store; supply your own only if you
- * already have a secure keystore. Never back this with plain SharedPreferences —
- * these are the keys to a user's health data.
- */
-fun LumoraBle.Companion.create(
-    context: Context,
-    credentials: CredentialStore = EncryptedCredentialStore(context),
-): LumoraBle = LumoraBleImpl(context.applicationContext, credentials)

@@ -80,11 +80,26 @@ exception: it implements published SIG profiles and carries none of that risk.
 
 **Android**
 
+**Protocols are opt-in.** Depend on the ones you want, and nothing else ships:
+
 ```kotlin
 dependencies {
     implementation("dev.lumora.ble:sdk:0.1.0-alpha01")
+
+    // Published Bluetooth SIG profiles. No vendor terms attached.
+    implementation("dev.lumora.ble:standard:0.1.0-alpha01")
+
+    // Vendor protocols are reverse-engineered and unofficial: adding one
+    // means accepting that vendor's terms of service on your users' behalf.
+    // implementation("dev.lumora.ble:dexcom:0.1.0-alpha01")
+    // implementation("dev.lumora.ble:oura:0.1.0-alpha01")
+    // implementation("dev.lumora.ble:libre:0.1.0-alpha01")
 }
 ```
+
+This is a legal boundary as much as a packaging one. Bundling every protocol
+would impose Dexcom's, Ōura's and Abbott's terms on an app that only wanted a
+standard heart rate strap, so `:sdk` depends on no device module at all.
 
 The SDK owns a coroutine scope, so scope it to something and close it:
 
@@ -113,10 +128,12 @@ dependencies:
 Kotlin:
 
 ```kotlin
-val sdk = LumoraBle.create(context)
-
-// A G6's encryption key is derived from its serial, so set it before connecting.
-sdk.setDexcomTransmitter("8UMS7E", sessionStart = Instant.now())
+val sdk = LumoraBle.create(context) {
+    install(StandardGattProtocol)
+    // A G6's encryption key derives from its serial, so the protocol cannot
+    // be built without one — it is a constructor argument, not a later setter.
+    install(DexcomProtocolFactory("8UMS7E", sessionStart = Instant.now()))
+}
 
 sdk.scan(DeviceKind.DEXCOM_SENSOR).collect { device ->
     sdk.connect(device)
@@ -202,7 +219,7 @@ substitute plain `SharedPreferences`.
 ## Build
 
 ```bash
-./gradlew test                                    # native, 87 tests
+./gradlew test                                    # native, 92 tests
 cd flutter/lumora_ble && flutter test             # Dart, 17 tests
 ./gradlew publishToMavenLocal                     # install locally to try it
 ```

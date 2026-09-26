@@ -69,19 +69,6 @@ interface LumoraBle {
     suspend fun readLibreTag(tag: Any): List<DeviceReading>
 
     /**
-     * Supplies the Dexcom transmitter serial (6 characters, printed on the
-     * applicator) and the current sensor session start.
-     *
-     * The serial IS the credential for a G6 — the encryption key is derived from
-     * it — so this must be set before connecting to a Dexcom sensor.
-     *
-     * @throws DeviceException if [serial] is not 6 alphanumeric characters.
-     *   Validating here rather than at connect time surfaces a typo while the
-     *   user is still looking at the applicator.
-     */
-    fun setDexcomTransmitter(serial: String, sessionStart: Instant)
-
-    /**
      * True if every runtime permission BLE needs is granted.
      *
      * This only reports status; prompting requires an Activity, so the host app

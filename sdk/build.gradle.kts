@@ -34,10 +34,11 @@ dependencies {
     // api, not implementation: consumers of the SDK need the core types.
     api(project(":core"))
     implementation(project(":transport"))
-    implementation(project(":devices:oura"))
-    implementation(project(":devices:libre"))
-    implementation(project(":devices:dexcom"))
-    implementation(project(":devices:standard"))
+    // Deliberately NOT depending on the device modules. Protocols are
+    // installed by the consumer, who depends only on the ones they want —
+    // bundling them here would impose every vendor's terms of service on an
+    // app that asked for none of them. They are on the test classpath only.
+    testImplementation(project(":devices:standard"))
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

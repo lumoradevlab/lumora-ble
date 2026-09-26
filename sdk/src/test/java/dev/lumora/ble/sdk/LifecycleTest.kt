@@ -166,6 +166,5 @@ private class TestableLumoraBle(
 
     override suspend fun backfill(id: DeviceId, since: Instant) = emptyList<DeviceReading>()
     override suspend fun readLibreTag(tag: Any) = emptyList<DeviceReading>()
-    override fun setDexcomTransmitter(serial: String, sessionStart: Instant) = Unit
     override fun requestPermissions() = true
 }
