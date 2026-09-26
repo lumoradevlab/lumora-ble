@@ -105,16 +105,17 @@ The SDK owns a coroutine scope, so scope it to something and close it:
 
 ```kotlin
 class HealthViewModel(app: Application) : AndroidViewModel(app) {
-    private val sdk = LumoraBle.create(app)
+    private val sdk = LumoraBle.create(app) { install(StandardGattProtocol) }
 
-    override fun onCleared() {
-        viewModelScope.launch { sdk.close() }
-    }
+    override fun onCleared() = sdk.close()
 }
 ```
 
-Without `close()` the SDK's collectors outlive the component that created
-them.
+`close()` is synchronous and thread-safe, and `LumoraBle` is `Closeable`, so
+it fits a teardown callback directly. That is deliberate: launching teardown
+into a coroutine races the scope's own cancellation, and a lost race leaks a
+GATT client interface — Android caps an app at roughly 32, and a leaked one
+stays leaked until the process restarts.
 
 **Flutter**
 

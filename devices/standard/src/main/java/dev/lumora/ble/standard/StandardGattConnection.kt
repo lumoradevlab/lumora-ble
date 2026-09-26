@@ -150,6 +150,13 @@ class StandardGattConnection(
         return emptyList()
     }
 
+    /** Synchronous release; see [DeviceConnection.release]. */
+    override fun release() {
+        link?.close()
+        link = null
+        _state.value = ConnectionState.Disconnected
+    }
+
     override suspend fun disconnect() {
         link?.close()
         link = null

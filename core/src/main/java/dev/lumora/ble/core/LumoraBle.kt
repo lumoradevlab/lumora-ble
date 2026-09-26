@@ -18,7 +18,7 @@ import java.time.Instant
  * sdk.readings.collect { reading -> ... }
  * ```
  */
-interface LumoraBle {
+interface LumoraBle : java.io.Closeable {
 
     /** Devices this build can actually talk to, with their current support level. */
     val supportedDevices: List<DeviceSupport>
@@ -94,14 +94,25 @@ interface LumoraBle {
     /**
      * Disconnects everything and releases the SDK's internal coroutine scope.
      *
-     * An instance is unusable afterwards; create a new one to reconnect. Call
-     * this when the owning component goes away — an SDK instance scoped to an
-     * Activity or ViewModel and never closed keeps its collectors alive for the
-     * life of the process.
+     * **Synchronous and safe to call from any thread**, so it fits a teardown
+     * callback directly:
      *
+     * ```
+     * override fun onCleared() = sdk.close()
+     * ```
+     *
+     * Deliberately not a `suspend` function. Releasing GATT clients has to
+     * happen before the owning component goes away — launching it into a
+     * coroutine races the scope's own cancellation, and a lost race leaks
+     * client interfaces, which Android caps at ~32 per app and which stay
+     * leaked until the process restarts. The disconnect is issued
+     * synchronously; only the peripheral's acknowledgement is asynchronous,
+     * and that does not gate the local release.
+     *
+     * An instance is unusable afterwards; create a new one to reconnect.
      * Idempotent.
      */
-    suspend fun close()
+    override fun close()
 
     companion object
 }

@@ -33,7 +33,10 @@ android {
 dependencies {
 
 
-    implementation(libs.kotlinx.coroutines.core)
+    // api, not implementation: the public API returns Flow<T>, so a consumer
+    // cannot compile against scan() or readings without coroutines on their
+    // compile classpath.
+    api(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.timber)

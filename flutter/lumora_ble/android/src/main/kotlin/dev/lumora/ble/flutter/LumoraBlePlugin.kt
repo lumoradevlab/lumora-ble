@@ -87,7 +87,7 @@ class LumoraBlePlugin : FlutterPlugin {
     private fun rebuildSdk() {
         val previous = sdk
         sdk = buildSdk()
-        scope.launch { runCatching { previous.close() } }
+        runCatching { previous.close() }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -95,11 +95,9 @@ class LumoraBlePlugin : FlutterPlugin {
         readingEvents.setStreamHandler(null)
         connectionEvents.setStreamHandler(null)
         scanEvents.setStreamHandler(null)
-        // runBlocking, not scope.launch: cancelling the scope on the next line
-        // would race the coroutine and could abandon live GATT connections,
-        // leaking client interfaces for the life of the process. Teardown is
-        // brief and this is already the engine-detach path.
-        runBlocking { runCatching { sdk.close() } }
+        // close() is synchronous, so no runBlocking and no race with the
+        // scope cancellation below.
+        runCatching { sdk.close() }
         scope.cancel()
     }
 

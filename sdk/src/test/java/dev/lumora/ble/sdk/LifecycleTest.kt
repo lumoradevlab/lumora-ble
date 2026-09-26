@@ -46,6 +46,15 @@ class LifecycleTest {
             stateFlow.value = ConnectionState.Disconnected
         }
 
+        var released = false
+            private set
+
+        override fun release() {
+            released = true
+            disconnected = true
+            stateFlow.value = ConnectionState.Disconnected
+        }
+
         override suspend fun backfill(since: Instant) = emptyList<DeviceReading>()
     }
 
@@ -89,7 +98,7 @@ class LifecycleTest {
     }
 
     @Test
-    fun `close disconnects everything and is idempotent`() = runTest {
+    fun `close releases synchronously, before any coroutine runs`() = runTest {
         val connection = CountingConnection(DeviceKind.HEART_RATE_MONITOR)
         val sdk = harness(connection)
 
@@ -97,8 +106,19 @@ class LifecycleTest {
         advanceUntilIdle()
 
         sdk.close()
+
+        // Asserted BEFORE advanceUntilIdle: the GATT client must be released
+        // by the time close() returns. If this needed a coroutine to run, a
+        // caller closing from onCleared() could be destroyed first and leak
+        // the client for the life of the process.
+        assertTrue("release must happen synchronously", connection.released)
+
+        // Cancellation itself is cooperative: Job.cancel() returns at once but
+        // the collector's onCompletion runs when it next resumes. That is fine
+        // — the native GATT client is already freed above, and a coroutine
+        // that never resumes holds nothing the OS cares about.
         advanceUntilIdle()
-        assertTrue("close must disconnect live devices", connection.disconnected)
+        assertEquals("collectors must stop", 0, connection.collectors)
 
         // A second close must not throw — callers tear down from several paths.
         sdk.close()
@@ -158,10 +178,14 @@ private class TestableLumoraBle(
         active.keys.toList().forEach { runCatching { disconnect(it) } }
     }
 
-    override suspend fun close() {
+    override fun close() {
         if (closed) return
         closed = true
-        disconnectAll()
+        // Mirrors LumoraBleImpl: release synchronously, then cancel.
+        active.values.forEach { runCatching { it.release() } }
+        active.clear()
+        mirrors.values.forEach { jobs -> jobs.forEach { it.cancel() } }
+        mirrors.clear()
     }
 
     override suspend fun backfill(id: DeviceId, since: Instant) = emptyList<DeviceReading>()

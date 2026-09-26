@@ -195,11 +195,25 @@ internal class LumoraBleImpl(
         active.keys.toList().forEach { runCatching { disconnect(it) } }
     }
 
-    override suspend fun close() {
+    /**
+     * Synchronous teardown, so a caller can release from onCleared() or
+     * onDestroy() without launching a coroutine that may never run.
+     *
+     * Order matters. Each connection's GATT client is released first and
+     * synchronously — Android caps an app at ~32 client interfaces and a
+     * leaked one stays leaked until the process restarts — and only then is
+     * the scope cancelled. Doing it the other way round would kill the
+     * coroutines mid-release.
+     */
+    override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        disconnectAll()
-        // Cancels every collector and any in-flight connection work. The
-        // instance is unusable afterwards, which the interface documents.
+
+        active.values.forEach { runCatching { it.release() } }
+        active.clear()
+        mirrors.values.forEach { jobs -> jobs.forEach { it.cancel() } }
+        mirrors.clear()
+        _connections.value = emptyMap()
+
         scope.cancel()
     }
 

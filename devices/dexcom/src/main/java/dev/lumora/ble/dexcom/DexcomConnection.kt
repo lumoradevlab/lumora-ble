@@ -165,6 +165,19 @@ class DexcomConnection(
         return emptyList()
     }
 
+    /**
+     * Synchronous release; see [DeviceConnection.release].
+     *
+     * Skips the polite DISCONNECT write that [disconnect] sends: that is a
+     * GATT round-trip, and the point of this path is to free the client
+     * without waiting. The transmitter drops the link on its own.
+     */
+    override fun release() {
+        link?.close()
+        link = null
+        _state.value = ConnectionState.Disconnected
+    }
+
     override suspend fun disconnect() {
         runCatching { link?.write(DexcomProtocol.CONTROL, DexcomProtocol.DISCONNECT) }
         link?.close()

@@ -122,8 +122,10 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
-        // Leaked GATT clients are process-wide poison; release on teardown.
-        viewModelScope.launch { runCatching { sdk.disconnectAll() } }
+        // Synchronous by design: launching this would race the ViewModel's
+        // own scope cancellation, and a lost race leaks a GATT client for the
+        // life of the process.
+        sdk.close()
     }
 
     private fun DeviceReading.describe(): Pair<String, String> = when (this) {

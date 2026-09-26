@@ -23,6 +23,20 @@ interface DeviceConnection {
     suspend fun disconnect()
 
     /**
+     * Releases the GATT client immediately, without suspending.
+     *
+     * Called from [LumoraBle.close], which cannot suspend: a teardown callback
+     * may return before a launched coroutine runs, and a lost race leaks a
+     * client interface for the life of the process.
+     *
+     * Implementations must be idempotent and safe to call from any thread.
+     * The default routes to [disconnect] only for implementations with no
+     * native resource to release; anything holding a `GattConnection` must
+     * override it.
+     */
+    fun release() = Unit
+
+    /**
      * Pulls stored on-device history. Separate from [readings] because it is a
      * bounded request/response exchange, not a subscription.
      */
