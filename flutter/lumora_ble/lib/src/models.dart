@@ -199,6 +199,15 @@ sealed class DeviceReading {
           timestamp: ts,
           sdnnMs: (map['sdnnMs'] as num).toDouble(),
         ),
+      'sleep' => SleepReading(
+          timestamp: ts,
+          stage: _decode(SleepStage.values, map['stage'] as String?,
+              SleepStage.asleepUnspecified),
+          end: DateTime.fromMillisecondsSinceEpoch(
+            (map['end'] as num).toInt(),
+            isUtc: true,
+          ),
+        ),
       final other => throw FormatException('unknown reading type: $other'),
     };
   }
@@ -264,6 +273,39 @@ class SpO2Reading extends DeviceReading {
       : super(timestamp);
 
   final double percent;
+}
+
+/// A sleep stage, as reported by the platform's own staging.
+///
+/// Not normalised across vendors: Apple's staging comes from its own model.
+/// A stage means what the source platform says it means.
+enum SleepStage {
+  inBed,
+  asleepUnspecified,
+  asleepCore,
+  asleepDeep,
+  asleepRem,
+  awake,
+}
+
+/// One scored sleep interval.
+///
+/// Unlike every other reading this covers a span, not an instant: HealthKit
+/// stores sleep as discrete category samples with a start and an end. A night
+/// arrives as many of these, one per stage transition, not as a summary — fold
+/// them yourself, excluding [SleepStage.awake] and [SleepStage.inBed] from
+/// time-asleep totals.
+class SleepReading extends DeviceReading {
+  const SleepReading({
+    required DateTime timestamp,
+    required this.stage,
+    required this.end,
+  }) : super(timestamp);
+
+  final SleepStage stage;
+  final DateTime end;
+
+  Duration get duration => end.difference(timestamp);
 }
 
 /// Heart rate variability as a single SDNN figure in milliseconds.

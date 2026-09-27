@@ -22,7 +22,10 @@ enum IosSupportMatrix {
                 + "BLE service for health data. iOS never reports whether read access "
                 + "was denied, so an empty result is not evidence of a permission "
                 + "problem. Samples arrive in batches as the watch syncs, so this is "
-                + "near-live rather than the sub-second cadence of a BLE strap.",
+                + "near-live rather than the sub-second cadence of a BLE strap. Sleep "
+                + "is returned as staged intervals from backfill only, never live; "
+                + "stage detail (core/deep/REM) needs iOS 16+ and a watch that "
+                + "records it, older sources report only asleepUnspecified.",
             transport: .healthKit
         ),
         DeviceSupport(

@@ -124,6 +124,10 @@ enum DeviceReading {
     /// which is why it is not folded into `heartRate`'s ibiMs.
     case heartRateVariability(sdnnMs: Double, timestamp: Date)
 
+    /// One scored sleep interval. Covers a span rather than an instant, which
+    /// is why it carries an end as well as a timestamp.
+    case sleep(stage: String, start: Date, end: Date)
+
     func toMap() -> [String: Any?] {
         switch self {
         case .heartRate(let bpm, let ibi, let ts):
@@ -137,6 +141,9 @@ enum DeviceReading {
             return ["type": "spO2", "timestamp": ts.millis, "percent": percent]
         case .heartRateVariability(let sdnn, let ts):
             return ["type": "hrv", "timestamp": ts.millis, "sdnnMs": sdnn]
+        case .sleep(let stage, let start, let end):
+            return ["type": "sleep", "timestamp": start.millis,
+                    "stage": stage, "end": end.millis]
         }
     }
 }

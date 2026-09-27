@@ -309,5 +309,13 @@ internal fun DeviceReading.toMap(): Map<String, Any?> {
         is DeviceReading.SpO2 -> mapOf("type" to "spo2", "percent" to percent)
         is DeviceReading.HeartRateVariability ->
             mapOf("type" to "hrv", "sdnnMs" to sdnnMs)
+        // Android reaches no sleep source today — Oura's staging runs in
+        // Oura's cloud, not on the ring — but the branch keeps the `when`
+        // exhaustive and the wire format identical across platforms.
+        is DeviceReading.Sleep -> mapOf(
+            "type" to "sleep",
+            "stage" to stage.name,
+            "end" to end.toEpochMilli(),
+        )
     }
 }

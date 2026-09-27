@@ -84,6 +84,35 @@ void main() {
       expect((r as HeartRateVariabilityReading).sdnnMs, 42.3);
     });
 
+    test('decodes a sleep interval with its stage and end', () {
+      // Sleep is the only reading covering a span rather than an instant, so
+      // the end must survive the channel or every duration is wrong.
+      final r = DeviceReading.fromMap({
+        'type': 'sleep',
+        'timestamp': 0,
+        'stage': 'ASLEEP_DEEP',
+        'end': 3600000,
+      });
+
+      expect(r, isA<SleepReading>());
+      final sleep = r as SleepReading;
+      expect(sleep.stage, SleepStage.asleepDeep);
+      expect(sleep.duration, const Duration(hours: 1));
+    });
+
+    test('an unknown sleep stage degrades rather than throwing', () {
+      // Apple adds stages over time; a new one must not crash an app built
+      // against an older SDK.
+      final r = DeviceReading.fromMap({
+        'type': 'sleep',
+        'timestamp': 0,
+        'stage': 'ASLEEP_SOMETHING_NEW',
+        'end': 60000,
+      });
+
+      expect((r as SleepReading).stage, SleepStage.asleepUnspecified);
+    });
+
     test('throws on an unknown reading type', () {
       expect(
         () => DeviceReading.fromMap({'type': 'mystery', 'timestamp': 0}),

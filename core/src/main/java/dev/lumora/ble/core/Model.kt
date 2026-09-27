@@ -98,6 +98,28 @@ enum class GlucoseTrend {
     FALLING_SLIGHTLY, FALLING, FALLING_RAPIDLY, UNKNOWN,
 }
 
+/**
+ * A sleep stage, as reported by the platform's own staging.
+ *
+ * Deliberately not an attempt to normalise across vendors: Apple's staging
+ * comes from its own model, and Oura's scores do not run on the ring at all.
+ * A stage here means what the source platform says it means.
+ */
+enum class SleepStage {
+    /** In bed but not scored as asleep. Excluded from time-asleep totals. */
+    IN_BED,
+
+    /** Asleep, with no stage breakdown available. */
+    ASLEEP_UNSPECIFIED,
+
+    ASLEEP_CORE,
+    ASLEEP_DEEP,
+    ASLEEP_REM,
+
+    /** Scored awake during a sleep period. Excluded from time-asleep totals. */
+    AWAKE,
+}
+
 data class HeartRateSample(
     val timestamp: Instant,
     val bpm: Int,
@@ -120,6 +142,30 @@ sealed interface DeviceReading {
     data class Battery(val level: BatteryLevel, override val timestamp: Instant) : DeviceReading
     data class Temperature(val celsius: Double, override val timestamp: Instant) : DeviceReading
     data class SpO2(val percent: Double, override val timestamp: Instant) : DeviceReading
+
+    /**
+     * One scored sleep interval.
+     *
+     * Unlike every other reading this covers a span rather than an instant,
+     * because that is what the underlying data is: HealthKit stores sleep as
+     * discrete category samples with a start and an end, not as a value
+     * sampled at a moment. [timestamp] is the interval's start so the type
+     * still satisfies the shared contract and sorts sensibly alongside the
+     * others.
+     *
+     * A night is many of these, one per stage transition — not a single
+     * summary. Callers wanting "hours asleep" must fold them, and should
+     * exclude [SleepStage.AWAKE] and [SleepStage.IN_BED] when doing so.
+     */
+    data class Sleep(
+        val stage: SleepStage,
+        override val timestamp: Instant,
+        val end: Instant,
+    ) : DeviceReading {
+        /** Convenience for the common case of summing time in a stage. */
+        val durationMinutes: Long
+            get() = java.time.Duration.between(timestamp, end).toMinutes()
+    }
 
     /**
      * Heart rate variability as a single SDNN figure in milliseconds.

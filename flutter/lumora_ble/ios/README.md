@@ -37,11 +37,34 @@ every read returns nothing.
 | `scan()` | **Fails** with `ProtocolViolation`. HealthKit exposes no devices to scan for. |
 | `connect()` | Requests Health authorization and starts observing. No radio link is established. |
 | `readings` | Samples as HealthKit receives them from the watch — near-live, delivered in batches. |
-| `backfill()` | **Better than the BLE path**: returns real recorded history, where standard GATT returns nothing. |
+| `backfill()` | **Better than the BLE path**: returns real recorded history, where standard GATT returns nothing. Includes staged sleep intervals. |
 | `setDexcomTransmitter()` / `readLibreSensor()` | Fail with `ProtocolViolation` — Android only. |
 
 Check `supportedDevices()` at runtime rather than assuming: the two platforms
 return genuinely different matrices.
+
+## Sleep
+
+Returned by `backfill()` as `SleepReading`s — one per stage transition, not a
+nightly summary, because that is how HealthKit stores it. A night is dozens of
+intervals; fold them yourself:
+
+```dart
+final asleep = readings
+    .whereType<SleepReading>()
+    .where((r) => r.stage != SleepStage.awake && r.stage != SleepStage.inBed)
+    .fold(Duration.zero, (sum, r) => sum + r.duration);
+```
+
+Excluding `awake` and `inBed` is the part worth getting right — counting them
+inflates time-asleep by however long the user lay reading.
+
+Stage detail (`asleepCore`, `asleepDeep`, `asleepRem`) requires **iOS 16+**
+and a watch that records staging. Older systems and older watches report
+`asleepUnspecified`, which is handled rather than dropped.
+
+Sleep is backfill-only: there is no live sleep stream, because staging is
+computed after the fact.
 
 ## The permission caveat that matters
 

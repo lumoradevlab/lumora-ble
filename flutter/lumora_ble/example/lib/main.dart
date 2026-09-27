@@ -76,6 +76,18 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Running total per stage, since sleep arrives as many short intervals.
+  final _sleepMinutes = <SleepStage, int>{};
+
+  int _totalSleep(SleepReading r) {
+    _sleepMinutes.update(
+      r.stage,
+      (n) => n + r.duration.inMinutes,
+      ifAbsent: () => r.duration.inMinutes,
+    );
+    return _sleepMinutes[r.stage]!;
+  }
+
   void _onReading(DeviceReading reading) {
     final entry = switch (reading) {
       HeartRateReading r => ('Heart rate', '${r.bpm} bpm'),
@@ -85,8 +97,16 @@ class _HomePageState extends State<HomePage> {
       TemperatureReading r =>
         ('Body temperature', '${r.celsius.toStringAsFixed(2)} °C'),
       BatteryReading r => ('Battery', '${r.percent}%'),
+      // Aggregated rather than shown per-sample: a night is dozens of stage
+      // intervals, and one row per interval would bury everything else.
+      SleepReading r => (
+          'Sleep · ${r.stage.name}',
+          '${_totalSleep(r)} min total',
+        ),
       GlucoseReading r => ('Glucose', '${r.mgdl} mg/dL'),
-      _ => ('Reading', reading.runtimeType.toString()),
+      // No catch-all: the switch now covers every DeviceReading subtype, and
+      // a fallback would hide a new one being added rather than failing to
+      // compile here.
     };
     setState(() {
       _counts.update(entry.$1, (n) => n + 1, ifAbsent: () => 1);
