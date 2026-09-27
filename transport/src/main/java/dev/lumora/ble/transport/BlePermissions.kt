@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import dev.lumora.ble.core.InternalLumoraApi
 
 /**
  * Runtime permissions differ sharply by API level:
@@ -12,7 +13,12 @@ import androidx.core.content.ContextCompat
  *              scan is flagged neverForLocation in the manifest.
  *  - API <31 : legacy BLUETOOTH/BLUETOOTH_ADMIN plus ACCESS_FINE_LOCATION,
  *              without which scans silently return zero results.
+ *
+ * **Not public API.** Consumers read the same list from
+ * [dev.lumora.ble.core.LumoraBle.requiredPermissions], which exists so an app
+ * can prompt without depending on this module. See [InternalLumoraApi].
  */
+@InternalLumoraApi
 object BlePermissions {
 
     fun required(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

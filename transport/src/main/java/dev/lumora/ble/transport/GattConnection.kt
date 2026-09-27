@@ -25,7 +25,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-/** A characteristic notification: which characteristic, and the bytes it pushed. */
+/**
+ * A characteristic notification: which characteristic, and the bytes it pushed.
+ *
+ * **Not public API** — it appears only on [GattConnection.notifications], which
+ * is itself internal plumbing. Consumers see parsed [dev.lumora.ble.core.DeviceReading]s.
+ */
+@InternalLumoraApi
 data class Notification(val characteristic: UUID, val value: ByteArray) {
     override fun equals(other: Any?) = other is Notification &&
         characteristic == other.characteristic && value.contentEquals(other.value)

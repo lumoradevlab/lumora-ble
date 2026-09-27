@@ -11,6 +11,7 @@ import android.content.Context
 import android.os.ParcelUuid
 import dev.lumora.ble.core.DeviceError
 import dev.lumora.ble.core.DeviceException
+import dev.lumora.ble.core.InternalLumoraApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -22,8 +23,13 @@ import java.util.UUID
  * The returned flow stops the scan when cancelled — the old implementation never
  * stopped scanning and spawned a fresh GATT client per scan result, which both
  * drained battery and leaked connections.
+ *
+ * **Not public API.** Consumers scan through [dev.lumora.ble.core.LumoraBle.scan],
+ * which applies the installed protocol's service filter and de-duplicates
+ * results. See [InternalLumoraApi].
  */
 @SuppressLint("MissingPermission")
+@InternalLumoraApi
 class BleScanner(private val context: Context) {
 
     fun scan(
