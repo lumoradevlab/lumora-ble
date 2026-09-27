@@ -359,8 +359,14 @@ module declares `:transport` with `implementation`, so it resolves at runtime
 scope and never reaches a consumer's compile classpath — importing
 `dev.lumora.ble.transport.GattConnection` from an app does not resolve. The
 shared plumbing is additionally marked `@InternalLumoraApi`, an opt-in
-annotation that fails compilation with an explanatory message for anyone who
-adds a direct dependency to bypass the scoping.
+annotation at ERROR level — not a warning — so anyone who adds a direct
+`:transport` dependency to bypass the scoping gets a hard compile failure
+with an explanatory message rather than something they can ignore.
+
+Everything public in `transport` carries it: `GattConnection`, `BleScanner`,
+`Notification` and `BlePermissions`. The library's own modules opt in through
+a compiler flag; `testapp` does not, and builds fine, because a consumer never
+needs to reach that layer.
 
 Practical consequence: the SDK must expose everything a consumer legitimately
 needs, because they cannot reach around it. `LumoraBle.requiredPermissions`
