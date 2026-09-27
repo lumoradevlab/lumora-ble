@@ -4,8 +4,8 @@ description: >-
   and standard BLE heart rate; iOS reads Apple Watch data from HealthKit. The
   platforms support different devices — check supportedDevices() at runtime.
 version: 0.1.0-alpha.1
-repository: https://github.com/lumoradevlab/BLE-Android
-issue_tracker: https://github.com/lumoradevlab/BLE-Android/issues
+repository: https://github.com/lumoradevlab/lumora-ble
+issue_tracker: https://github.com/lumoradevlab/lumora-ble/issues
 topics:
   - bluetooth
   - healthkit

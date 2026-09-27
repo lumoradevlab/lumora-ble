@@ -75,7 +75,7 @@ publishing {
         //     -PgithubUser=<user> -PgithubToken=<token>
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+            url = uri("https://maven.pkg.github.com/lumoradevlab/lumora-ble")
             credentials {
                 username = (project.findProperty("githubUser") as String?)
                     ?: System.getenv("GITHUB_ACTOR")
@@ -96,7 +96,7 @@ publishing {
                     "One SDK for health wearables: Oura, Dexcom G6, " +
                         "FreeStyle Libre and standard GATT heart rate."
                 )
-                url.set("https://github.com/lumoradevlab/BLE-Android")
+                url.set("https://github.com/lumoradevlab/lumora-ble")
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -115,11 +115,11 @@ publishing {
                     }
                 }
                 scm {
-                    url.set("https://github.com/lumoradevlab/BLE-Android")
+                    url.set("https://github.com/lumoradevlab/lumora-ble")
                     connection.set(
-                        "scm:git:https://github.com/lumoradevlab/BLE-Android.git")
+                        "scm:git:https://github.com/lumoradevlab/lumora-ble.git")
                     developerConnection.set(
-                        "scm:git:ssh://git@github.com/lumoradevlab/BLE-Android.git")
+                        "scm:git:ssh://git@github.com/lumoradevlab/lumora-ble.git")
                 }
             }
         }

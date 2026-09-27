@@ -167,7 +167,7 @@ allprojects {
         // Or: GitHub Packages. Note this needs a personal access token with
         // read:packages even though the repository is public.
         maven {
-            url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+            url = uri("https://maven.pkg.github.com/lumoradevlab/lumora-ble")
             credentials {
                 username = providers.gradleProperty("githubUser").get()
                 password = providers.gradleProperty("githubToken").get()
@@ -200,7 +200,7 @@ Not a medical device. Do not use it for diagnosis or treatment decisions.
 
 `0.1.0-alpha.1`. The iOS HealthKit path and the Android scan/connect path are
 verified on real hardware; heart rate parsing and the three vendor protocols
-are not. See [docs/PROTOCOL-STATUS.md](https://github.com/lumoradevlab/BLE-Android/blob/main/docs/PROTOCOL-STATUS.md).
+are not. See [docs/PROTOCOL-STATUS.md](https://github.com/lumoradevlab/lumora-ble/blob/main/docs/PROTOCOL-STATUS.md).
 
 ## Licence
 

@@ -6,7 +6,7 @@ Pod::Spec.new do |s|
 One SDK for health wearables. The iOS implementation reads Apple Watch data
 from HealthKit; the BLE device protocols are implemented on Android only.
                        DESC
-  s.homepage         = 'https://github.com/lumoradevlab/BLE-Android'
+  s.homepage         = 'https://github.com/lumoradevlab/lumora-ble'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Lumora' => 'dev@lumora.dev' }
   s.source           = { :path => '.' }

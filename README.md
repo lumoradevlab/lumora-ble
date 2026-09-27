@@ -105,8 +105,8 @@ is worth stating plainly.
 **Build it locally** — no accounts, no tokens:
 
 ```bash
-git clone https://github.com/lumoradevlab/BLE-Android
-cd BLE-Android && ./gradlew publishToMavenLocal
+git clone https://github.com/lumoradevlab/lumora-ble
+cd lumora-ble && ./gradlew publishToMavenLocal
 ```
 
 then add `mavenLocal()` to your repositories. This is the simplest route for
@@ -119,7 +119,7 @@ trying the SDK, and what the CI for this repository does.
 ```kotlin
 repositories {
     maven {
-        url = uri("https://maven.pkg.github.com/lumoradevlab/BLE-Android")
+        url = uri("https://maven.pkg.github.com/lumoradevlab/lumora-ble")
         credentials {
             // Never commit these. Put them in ~/.gradle/gradle.properties.
             username = providers.gradleProperty("githubUser").get()
